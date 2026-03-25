@@ -2,7 +2,8 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
 const { Resend } = require('resend');
 
-export const config = {
+// Disable body parsing for Stripe signature verification
+module.exports.config = {
   api: { bodyParser: false },
 };
 

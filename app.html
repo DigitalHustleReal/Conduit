@@ -712,7 +712,71 @@ const S={
     {id:4,trigger:'keyword.top5',action:'create_related_draft',enabled:false},
   ]),
 };
-function save(k){DB.set(k,S[k]);}
+function save(k){
+  DB.set(k,S[k]);
+  // Async sync to Supabase (non-blocking)
+  if(_sb && S.workspaceId) _syncToSupabase(k);
+}
+
+// Supabase sync — maps localStorage keys to Supabase tables
+const _SB_TABLE_MAP = {
+  content: { table:'content', isArray:true, mapFn: function(item){
+    return {workspace_id:S.workspaceId, title:item.title||'Untitled', slug:item.slug||'', body:item.body||'', excerpt:item.excerpt||'',
+      status:item.status||'draft', collection:item.collection||'Articles', author:item.author||'', meta_title:item.metaTitle||item.seoTitle||'',
+      meta_desc:item.metaDesc||item.metaDescription||'', tags:item.tags||[], locale:item.locale||'en', seo_score:item.seoScore||0,
+      ai_score:item.aiScore||0, word_count:item.wordCount||0, target_keyword:item.targetKeyword||item.keyword||'', featured_image:item.featuredImage||item.ogImage||''};
+  }},
+  keywords: { table:'keywords', isArray:true, mapFn: function(item){
+    return {workspace_id:S.workspaceId, keyword:item.keyword||item.term||'', volume:item.volume||0, difficulty:item.difficulty||0,
+      cpc:item.cpc||0, position:item.pos||item.position||null, status:item.status||'tracked', url:item.url||'',
+      trend:item.trend||'stable'};
+  }},
+  media: { table:'media', isArray:true, mapFn: function(item){
+    return {workspace_id:S.workspaceId, name:item.name||'', url:item.url||item.src||'', type:item.type||'image',
+      size:item.size||0, alt_text:item.alt||'', source:item.source||'upload'};
+  }},
+  collections: { table:'collections', isArray:true, mapFn: function(item){
+    return {workspace_id:S.workspaceId, name:item.name||'', slug:item.slug||'', icon:item.icon||'📁',
+      fields:item.fields||[], sort_order:item.id||0};
+  }},
+  pipeline: { table:'pipeline', isArray:true, mapFn: function(item){
+    return {workspace_id:S.workspaceId, title:item.title||'', stage:item.stage||item.status||'idea',
+      assignee:item.assignee||'', priority:item.priority||'medium', notes:item.notes||'',
+      target_keyword:item.keyword||''};
+  }},
+};
+
+let _syncTimer = {};
+function _syncToSupabase(k){
+  // Debounce syncs per key — wait 2s after last save
+  clearTimeout(_syncTimer[k]);
+  _syncTimer[k] = setTimeout(async function(){
+    try {
+      const mapping = _SB_TABLE_MAP[k];
+      if(!mapping) {
+        // For non-mapped keys (settings, credits), store in workspace.settings
+        if(k === 'settings' || k === 'credits' || k === 'pricingPlan'){
+          const updates = {};
+          if(k === 'settings') updates.settings = S.settings;
+          if(k === 'credits') updates.credits_ai_calls = S.credits.aiCalls || 0;
+          if(k === 'pricingPlan') updates.plan = S.pricingPlan || 'free';
+          await _sb.from('workspaces').update(updates).eq('id', S.workspaceId);
+        }
+        return;
+      }
+      if(mapping.isArray && Array.isArray(S[k])){
+        // Delete existing and re-insert (simple full-sync strategy)
+        await _sb.from(mapping.table).delete().eq('workspace_id', S.workspaceId);
+        const rows = S[k].map(mapping.mapFn).filter(function(r){ return r; });
+        if(rows.length > 0){
+          await _sb.from(mapping.table).insert(rows);
+        }
+      }
+    } catch(e){
+      console.warn('Supabase sync failed for', k, e);
+    }
+  }, 2000);
+}
 
 function defaultCollections(){return[
   {id:1,name:'Articles',slug:'articles',icon:'📝',color:'vi',description:'Long-form editorial content and blog posts',fields:[
@@ -4257,10 +4321,23 @@ function upgradePlan(p){
     const l=planLimits();S.credits.aiLimit=l.aiCalls;save('credits');
     toast('Switched to Free plan','info');go('settings');return;
   }
+  // Use backend checkout if signed in
+  if(window._conduitSession){
+    toast('Redirecting to Stripe Checkout…','info');
+    fetch('/api/create-checkout',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+window._conduitSession.access_token},
+      body:JSON.stringify({plan:p})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.url) window.location.href=d.url;
+      else toast(d.error||'Checkout failed','error');
+    }).catch(function(e){toast('Checkout error: '+e.message,'error');});
+    return;
+  }
   const sk=S.settings.stripePublishableKey;
   const priceId=S.settings.stripePriceIds?.[p];
   if(sk && priceId && sk.startsWith('pk_')){
-    // Real Stripe Checkout
+    // Client-side Stripe Checkout (fallback)
     const script=document.createElement('script');
     script.src='https://js.stripe.com/v3/';
     script.onload=()=>{
@@ -7649,13 +7726,71 @@ async function loadWorkspace(user){
     };
     const { data: created } = await _sb.from('workspaces').insert(newWs).select().single();
     workspace = created;
+    // Send welcome email (non-blocking)
+    if(user.email){
+      fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({to:user.email,template:'welcome',data:[workspace?.name||'My Workspace']})
+      }).catch(function(){});
+    }
   }
 
   if(workspace){
     S.workspaceId = workspace.id;
     S.siteName = workspace.name;
+    S.pricingPlan = workspace.plan || 'free';
+    S.credits.aiCalls = workspace.credits_ai_calls || 0;
     DB.set('siteName', workspace.name);
     DB.set('workspaceId', workspace.id);
+    DB.set('pricingPlan', S.pricingPlan);
+    DB.set('credits', S.credits);
+
+    // Load data from Supabase (graceful — falls back to localStorage)
+    try {
+      const wsId = workspace.id;
+      const [contentRes, kwRes, mediaRes, collRes, pipeRes] = await Promise.all([
+        _sb.from('content').select('*').eq('workspace_id', wsId).order('updated_at',{ascending:false}),
+        _sb.from('keywords').select('*').eq('workspace_id', wsId),
+        _sb.from('media').select('*').eq('workspace_id', wsId).order('created_at',{ascending:false}),
+        _sb.from('collections').select('*').eq('workspace_id', wsId).order('sort_order',{ascending:true}),
+        _sb.from('pipeline').select('*').eq('workspace_id', wsId),
+      ]);
+      // Only overwrite if Supabase has data (first login will be empty — keep localStorage defaults)
+      if(contentRes.data && contentRes.data.length > 0){
+        S.content = contentRes.data.map(function(r){return {id:r.id,title:r.title,slug:r.slug,body:r.body,excerpt:r.excerpt,
+          status:r.status,collection:r.collection,author:r.author,metaTitle:r.meta_title,metaDesc:r.meta_desc,seoTitle:r.meta_title,
+          metaDescription:r.meta_desc,tags:r.tags||[],locale:r.locale,seoScore:r.seo_score,aiScore:r.ai_score,wordCount:r.word_count,
+          targetKeyword:r.target_keyword,featuredImage:r.featured_image,updated:new Date(r.updated_at).getTime(),
+          created:new Date(r.created_at).getTime()};});
+        DB.set('content', S.content);
+      }
+      if(kwRes.data && kwRes.data.length > 0){
+        S.keywords = kwRes.data.map(function(r){return {id:r.id,keyword:r.keyword,term:r.keyword,volume:r.volume,difficulty:r.difficulty,
+          cpc:r.cpc,pos:r.position,position:r.position,status:r.status,url:r.url,trend:r.trend};});
+        DB.set('keywords', S.keywords);
+      }
+      if(mediaRes.data && mediaRes.data.length > 0){
+        S.media = mediaRes.data.map(function(r){return {id:r.id,name:r.name,url:r.url,src:r.url,type:r.type,
+          size:r.size,alt:r.alt_text,source:r.source};});
+        DB.set('media', S.media);
+      }
+      if(collRes.data && collRes.data.length > 0){
+        S.collections = collRes.data.map(function(r){return {id:r.sort_order||r.id,name:r.name,slug:r.slug,
+          icon:r.icon,fields:r.fields||[]};});
+        DB.set('collections', S.collections);
+      }
+      if(pipeRes.data && pipeRes.data.length > 0){
+        S.pipeline = pipeRes.data.map(function(r){return {id:r.id,title:r.title,stage:r.stage,status:r.stage,
+          assignee:r.assignee,priority:r.priority,notes:r.notes,keyword:r.target_keyword};});
+        DB.set('pipeline', S.pipeline);
+      }
+      // Load workspace settings
+      if(workspace.settings && Object.keys(workspace.settings).length > 0){
+        Object.assign(S.settings, workspace.settings);
+        DB.set('settings', S.settings);
+      }
+    } catch(e){
+      console.warn('Supabase data load failed, using localStorage:', e);
+    }
   }
 
   // Show sign-out button

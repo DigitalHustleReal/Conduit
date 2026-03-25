@@ -91,12 +91,23 @@ module.exports = async function handler(req, res) {
 
     // 5. Increment usage (async, non-blocking) — only if using platform key
     if (!userApiKey) {
+      const newCount = (workspace.credits_ai_calls || 0) + 1;
       supabase
         .from('workspaces')
-        .update({ credits_ai_calls: (workspace.credits_ai_calls || 0) + 1 })
+        .update({ credits_ai_calls: newCount })
         .eq('id', workspace.id)
         .then(() => {})
         .catch(() => {});
+
+      // Send usage warning email at 8 of 10 free calls
+      const limit = PLAN_LIMITS[workspace.plan] || PLAN_LIMITS.free;
+      if (newCount === limit - 2 && user.email) {
+        fetch((process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : '') + '/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: user.email, template: 'usageWarning', data: [newCount, limit] }),
+        }).catch(() => {});
+      }
     }
 
     return res.status(anthropicRes.status).json(data);

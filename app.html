@@ -711,6 +711,7 @@ const S={
     {id:3,trigger:'pipeline.review',action:'notify_team',enabled:false},
     {id:4,trigger:'keyword.top5',action:'create_related_draft',enabled:false},
   ]),
+  _analyticsEvents:DB.get('analyticsEvents',[]),
 };
 function save(k){
   DB.set(k,S[k]);
@@ -1041,13 +1042,18 @@ function renderPage(p){
 /* ═══════════ CREDIT SYSTEM ═══════════ */
 function planLimits(){const m={free:{aiCalls:100,storage:500,apiReqs:1000,seats:1,socialPosts:10},pro:{aiCalls:1000,storage:10240,apiReqs:10000,seats:5,socialPosts:100},business:{aiCalls:10000,storage:102400,apiReqs:100000,seats:15,socialPosts:1000}};return m[S.pricingPlan]||m.free;}
 function deductCredit(type='aiCalls'){
-  S.credits[type]=(S.credits[type]||0)+1;
-  const lim=planLimits();S.credits[type+'Limit']=lim[type];
-  save('credits');updateCreditMeter();
-  if(S.credits.aiCalls>=lim.aiCalls*0.8){
-    const pct=Math.round(S.credits.aiCalls/lim.aiCalls*100);
-    if(pct===80||pct>=100)toast(pct>=100?'AI call limit reached — upgrade or buy more credits':'AI calls at 80% — consider upgrading',pct>=100?'error':'info');
+  const lim=planLimits();
+  if((S.credits[type]||0)>=lim[type]){
+    toast('Credit limit reached for '+type+' — upgrade or add your API key','error');
+    return false;
   }
+  S.credits[type]=(S.credits[type]||0)+1;
+  S.credits[type+'Limit']=lim[type];
+  save('credits');updateCreditMeter();
+  const pct=Math.round((S.credits.aiCalls||0)/lim.aiCalls*100);
+  if(pct===80){toast('AI calls at 80% — consider upgrading','info');dispatchAutomation('ai.limit_80pct',{used:S.credits.aiCalls,limit:lim.aiCalls});}
+  trackEvent('ai_call',null,{type,used:S.credits[type],limit:lim[type]});
+  return true;
 }
 function updateCreditMeter(){
   const lim=planLimits();const used=S.credits.aiCalls||0;const pct=Math.min(used/lim.aiCalls*100,100);
@@ -1056,6 +1062,110 @@ function updateCreditMeter(){
   fill.style.width=pct+'%';
   fill.className='cm-fill '+(pct>=100?'cm-crit':pct>=80?'cm-warn':'cm-ok');
   label.textContent=`AI: ${used}/${lim.aiCalls}`;
+}
+
+/* ═══════════ REAL SEO & AI SCORING ═══════════ */
+function heuristicAIScore(item){
+  let s=30;
+  const wc=item.wordCount||(item.content||'').split(/\s+/).filter(Boolean).length;
+  if(wc>300)s+=10;if(wc>600)s+=10;if(wc>1000)s+=10;if(wc>1500)s+=5;
+  if((item.content||'').includes('## ')||/<h2/i.test(item.content||''))s+=8;
+  if(item.tags?.length>0)s+=5;if(item.tags?.length>3)s+=5;
+  if((item.metaDescription||item.metaDesc||'').length>50)s+=7;
+  if((item.metaTitle||item.seoTitle||'').length>10)s+=5;
+  if(item.keyword)s+=8;
+  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=7;
+  return Math.min(98,Math.max(0,s));
+}
+function heuristicSEOScore(item){
+  let s=15;
+  const mt=(item.metaTitle||item.seoTitle||'');
+  const md=(item.metaDescription||item.metaDesc||'');
+  if(mt.length>=10&&mt.length<=60)s+=18;else if(mt.length>0)s+=8;
+  if(md.length>=50&&md.length<=155)s+=18;else if(md.length>0)s+=8;
+  if(item.keyword)s+=12;
+  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=10;
+  if(item.slug)s+=5;
+  if((item.content||'').includes('## ')||/<h2/i.test(item.content||''))s+=8;
+  const wc=item.wordCount||(item.content||'').split(/\s+/).filter(Boolean).length;
+  if(wc>500)s+=7;if(wc>1000)s+=7;
+  return Math.min(98,Math.max(0,s));
+}
+async function scoreSEO(item){
+  if(!item.content||item.content.length<200)return;
+  const prov=AI_PROVIDERS[S.settings.aiProvider||'anthropic'];
+  if(!prov?.apiKey()&&!window._conduitSession)return;
+  try{
+    const raw=await callAI(
+      'Score this content. Return ONLY valid JSON.\n\nTitle: "'+item.title+'"\nKeyword: "'+(item.keyword||'none')+'"\nMeta title: "'+(item.metaTitle||'none')+'"\nMeta desc: "'+(item.metaDescription||'none')+'"\nWord count: '+(item.wordCount||0)+'\nContent (first 800 chars): "'+(item.content||'').slice(0,800)+'"\n\nReturn: {"aiScore":<0-100>,"seoScore":<0-100>,"tips":["tip1","tip2"]}',
+      {system:'You are a content scoring engine. Return only valid JSON, no markdown fences.',maxTokens:200}
+    );
+    const parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    if(parsed.aiScore>=0)item.aiScore=Math.min(100,Math.max(0,parsed.aiScore));
+    if(parsed.seoScore>=0)item.seoScore=Math.min(100,Math.max(0,parsed.seoScore));
+    save('content');
+  }catch(e){/* heuristic already applied, silent fallback */}
+}
+
+/* ═══════════ EVENT TRACKING ═══════════ */
+function trackEvent(eventType, contentId, metadata){
+  if(!S._analyticsEvents)S._analyticsEvents=DB.get('analyticsEvents',[]);
+  S._analyticsEvents.push({id:Date.now(),type:eventType,contentId:contentId||null,ts:Date.now(),meta:metadata||{}});
+  if(S._analyticsEvents.length>1000)S._analyticsEvents=S._analyticsEvents.slice(-1000);
+  DB.set('analyticsEvents',S._analyticsEvents);
+  if(_sb&&S.workspaceId){
+    _sb.from('analytics_events').insert({workspace_id:S.workspaceId,event_type:eventType,content_id:typeof contentId==='string'?contentId:null,metadata:metadata||{}}).then(function(){}).catch(function(){});
+  }
+}
+
+/* ═══════════ AUTOMATION ENGINE ═══════════ */
+function dispatchAutomation(triggerName, payload){
+  const active=(S.automations||[]).filter(function(a){return a.enabled&&a.trigger===triggerName;});
+  if(!active.length)return;
+  active.forEach(function(a){
+    try{executeAutomationAction(a.action,payload,triggerName);}
+    catch(e){console.error('Automation error:',a.action,e);}
+  });
+}
+function executeAutomationAction(action, payload, trigger){
+  switch(action){
+    case 'trigger_vercel_deploy':
+      if(S.settings.vercelHook)fireWebhook(S.settings.vercelHook,{event:trigger,item:payload?.title,ts:Date.now()},trigger);
+      else toast('Automation: Vercel hook not configured','info');
+      break;
+    case 'run_quality_check':
+      if(payload?.id){
+        const fails=checkQualityGates(payload);
+        if(fails.length)toast('Quality: '+fails.map(function(f){return f.name;}).join(', '),fails.some(function(f){return f.action==='block';})?'error':'info');
+        else toast('Quality gates passed ✓','success');
+      }
+      break;
+    case 'notify_team':
+      toast('Team notified: '+trigger+' on "'+(payload?.title||'item')+'"','info');
+      break;
+    case 'create_related_draft':
+      if(payload?.keyword||payload?.title){
+        const draft={id:Date.now(),title:'[Draft] Related: '+(payload.keyword||payload.title),collection:'Articles',status:'draft',content:'',wordCount:0,aiScore:0,seoScore:0,keyword:payload.keyword||'',author:'AI Automation',updated:Date.now(),tags:['auto-generated']};
+        S.content.unshift(draft);save('content');
+        toast('Auto-draft created: '+draft.title,'success');
+      }
+      break;
+    case 'add_to_pipeline':
+      S.pipeline.unshift({id:Date.now(),title:payload?.title||'Auto pipeline item',stage:'idea',assignee:'',priority:'medium',keyword:payload?.keyword||'',updated:Date.now()});
+      save('pipeline');toast('Added to pipeline','success');
+      break;
+    case 'send_email_digest':
+      toast('Email digest queued','info');
+      break;
+    case 'schedule_social_post':
+      toast('Social post scheduled','info');
+      break;
+    case 'archive_old_content':
+      var old=S.content.filter(function(c){return c.status==='draft'&&c.updated<Date.now()-90*86400000;});
+      old.forEach(function(c){c.status='archived';});
+      if(old.length){save('content');toast(old.length+' old drafts archived','success');}
+      break;
+  }
 }
 function resetCreditsIfNeeded(){if(Date.now()>=S.credits.resetDate){S.credits={...S.credits,aiCalls:0,apiReqs:0,socialPosts:0,resetDate:new Date(new Date().getFullYear(),new Date().getMonth()+1,1).getTime()};save('credits');}}
 
@@ -1964,12 +2074,17 @@ function saveNewContent(){
     tags:(document.getElementById('nc-tags')?.value||'').split(',').map(t=>t.trim()).filter(Boolean),
     content,
     wordCount:content.split(/\s+/).filter(Boolean).length,
-    aiScore:content.length>300?Math.round(72+Math.random()*22):0,
-    seoScore:document.getElementById('nc-meta')?.value?.length>50&&document.getElementById('nc-seo-title')?.value?.length>10?Math.round(70+Math.random()*24):0,
+    aiScore:heuristicAIScore({content,wordCount:content.split(/\s+/).filter(Boolean).length,tags:(document.getElementById('nc-tags')?.value||'').split(',').filter(Boolean),metaDescription:document.getElementById('nc-meta')?.value||'',keyword:document.getElementById('nc-kw')?.value||'',title,slug:''}),
+    seoScore:heuristicSEOScore({metaTitle:document.getElementById('nc-seo-title')?.value||'',metaDescription:document.getElementById('nc-meta')?.value||'',keyword:document.getElementById('nc-kw')?.value||'',title,slug:'',content}),
     slug:(document.getElementById('nc-seo-title')?.value||title).toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'').slice(0,60),
     author:'Admin',updated:Date.now(),
   };
-  S.content.unshift(item);save('content');toast('Content saved ✓','success');closeAndRefresh();
+  if(item.status==='published'&&!enforceQualityGates(item)){item.status='draft';}
+  S.content.unshift(item);save('content');toast('Content saved ✓','success');
+  dispatchAutomation('content.saved',item);
+  trackEvent('content_created',item.id);
+  scoreSEO(item);
+  closeAndRefresh();
 }
 
 function openEditor(id){
@@ -2073,11 +2188,16 @@ async function updateContent(id){
   i.collection=document.getElementById('ed-col')?.value||i.collection;
   const c=document.getElementById('ed-content')?.value||'';
   i.content=c;i.wordCount=c.split(/\s+/).filter(Boolean).length;
-  i.aiScore=c.length>300?Math.min(98,Math.round(75+Math.random()*20)):i.aiScore;
-  i.seoScore=i.metaDescription?.length>50&&i.metaTitle?.length>10?Math.min(96,Math.round(72+Math.random()*22)):i.seoScore;
+  i.aiScore=heuristicAIScore(i);
+  i.seoScore=heuristicSEOScore(i);
+  if(i.status==='published'&&!enforceQualityGates(i)){i.status='draft';toast('Reverted to draft — quality gates failed','info');}
   i.updated=Date.now();
   save('content');
   toast('Saved ✓ · version history updated','success');
+  dispatchAutomation('content.updated',i);
+  dispatchAutomation('content.saved',i);
+  trackEvent('content_updated',i.id);
+  scoreSEO(i);
   closeAndRefresh();
   // Auto-tag + auto-meta in background (non-blocking)
   const needsTags = !i.tags?.length && S.apiKey && c.length > 200;
@@ -2110,9 +2230,9 @@ Return exactly this JSON structure:
   }
 }
 
-function togglePublish(id){const i=S.content.find(x=>x.id===id);if(!i)return;i.status=i.status==='published'?'draft':'published';i.updated=Date.now();save('content');}
+function togglePublish(id){const i=S.content.find(x=>x.id===id);if(!i)return;if(i.status!=='published'){if(!enforceQualityGates(i))return;i.status='published';i.updated=Date.now();save('content');dispatchAutomation('content.published',i);}else{i.status='draft';i.updated=Date.now();save('content');}}
 function dupContent(id){const src=S.content.find(i=>i.id===id);if(!src)return;S.content.unshift({...src,id:Date.now(),title:src.title+' (Copy)',status:'draft',updated:Date.now()});save('content');toast('Duplicated ✓','success');go(S.page);}
-function delContent(id){if(!confirm('Delete this item?'))return;S.content=S.content.filter(i=>i.id!==id);save('content');toast('Deleted','success');closeAndRefresh();}
+function delContent(id){if(!confirm('Delete this item?'))return;const src=S.content.find(i=>i.id===id);S.content=S.content.filter(i=>i.id!==id);save('content');toast('Deleted','success');dispatchAutomation('content.deleted',{id,title:src?.title});closeAndRefresh();}
 function toggleSel(id,on){if(on)S.selected.push(id);else S.selected=S.selected.filter(x=>x!==id);}
 
 /* ── MEDIA LIBRARY ── */
@@ -4414,7 +4534,38 @@ function saveNewGate(){
   S.qualityGates.push({id:Date.now(),name,cat:document.getElementById('ng-cat')?.value||'Quality',enabled:true,type:document.getElementById('ng-type')?.value||'aiScore',op:document.getElementById('ng-op')?.value||'>=',val:parseInt(document.getElementById('ng-val')?.value||70),action:document.getElementById('ng-action')?.value||'warn',desc:document.getElementById('ng-desc')?.value||''});
   save('qualityGates');toast('Gate added ✓','success');closeModal();go('settings');
 }
-function checkQualityGates(item){const fails=[];S.qualityGates.filter(g=>g.enabled).forEach(g=>{const v=item[g.type]||0;const pass=(g.op==='>='?v>=g.val:g.op==='<='?v<=g.val:v===g.val);if(!pass)fails.push({name:g.name,action:g.action});});return fails;}
+function checkQualityGates(item){
+  const fails=[];
+  S.qualityGates.filter(g=>g.enabled).forEach(g=>{
+    let v;
+    switch(g.type){
+      case 'aiScore':v=item.aiScore||0;break;
+      case 'seoScore':v=item.seoScore||0;break;
+      case 'wordCount':v=item.wordCount||0;break;
+      case 'metaDesc':v=(item.metaDescription||item.metaDesc||'').length>0?1:0;break;
+      case 'metaTitle':v=(item.metaTitle||item.seoTitle||'').length>0?1:0;break;
+      case 'metaDescLen':v=(item.metaDescription||item.metaDesc||'').length;break;
+      case 'hasH2':v=(item.content||'').includes('## ')||/<h2/i.test(item.content||'')?1:0;break;
+      case 'kwInTitle':v=(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))?1:0;break;
+      case 'uniqueTitle':v=S.content.filter(c=>c.id!==item.id&&c.title===item.title).length===0?1:0;break;
+      case 'internalLinks':v=((item.content||'').match(/\[.*?\]\(.*?\)/g)||[]).length+((item.content||'').match(/<a\s/gi)||[]).length;break;
+      case 'imgAlt':v=((item.content||'').match(/alt=["'][^"']+["']/g)||[]).length>0?1:0;break;
+      default:v=item[g.type]||0;
+    }
+    const pass=(g.op==='>='?v>=g.val:g.op==='<='?v<=g.val:g.op==='exists'?v>0:g.op==='unique'?v>0:v===g.val);
+    if(!pass)fails.push({name:g.name,action:g.action,desc:g.desc||''});
+  });
+  return fails;
+}
+function enforceQualityGates(item){
+  const fails=checkQualityGates(item);
+  if(!fails.length)return true;
+  const blocks=fails.filter(f=>f.action==='block');
+  const warns=fails.filter(f=>f.action==='warn');
+  if(warns.length)toast('Quality warnings: '+warns.map(f=>f.name).join(', '),'info');
+  if(blocks.length){toast('Publish blocked: '+blocks.map(f=>f.name).join(', '),'error');return false;}
+  return true;
+}
 
 /* ══════════════════════════════════════════
    V5: AUTOMATIONS PAGE
@@ -4925,8 +5076,35 @@ async function runProgAI(){
   await ai(`Design a complete Programmatic SEO architecture for a ${S.siteName||'content website'}.\n\nConcept: "${idea}"\n\nDeliver a structured plan with:\n1. URL Pattern (with variables in {curly braces})\n2. Required variables and data sources for each\n3. H1 template (use variables)\n4. Meta title template (under 60 chars)\n5. Meta description template (under 155 chars)\n6. Estimated number of pages\n7. Estimated monthly traffic (be realistic)\n8. Top 5 target keywords with volume estimates\n9. Data source recommendation (preferably free/open)\n10. Next.js getStaticPaths implementation outline\n11. Internal linking strategy\n12. Content sections each page should have\n\nBe specific and actionable.`,'prog-ai-out');
 }
 function openProgTemplate(name){
-  toast(`Opening template builder for: ${name}`,'info');
+  modal(`<div class="modal-head"><div><div class="modal-title">Generate: ${name}</div></div><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div class="notice info" style="margin-bottom:14px"><span class="notice-icon">✦</span><div class="notice-text">AI will generate sample pages for the <strong>${name}</strong> template as draft content.</div></div>
+    <div class="field-group" style="margin-bottom:10px"><label class="field-label">Number of pages</label><select class="field-select" id="prog-count"><option>3</option><option selected>5</option><option>10</option></select></div>
+    <div class="field-group" style="margin-bottom:10px"><label class="field-label">Region / Focus</label><input class="field-input" id="prog-region" placeholder="e.g. Mumbai, Top banks, India" value="India"></div>
+    <div id="prog-out" class="ai-output-area empty" style="min-height:60px">Click Generate to create pages.</div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="runProgGenerate('${name.replace(/'/g,"\\'")}')">Generate Pages ✦</button></div>`,600);
 }
+async function runProgGenerate(templateName){
+  const count=parseInt(document.getElementById('prog-count')?.value||'5');
+  const region=document.getElementById('prog-region')?.value||'India';
+  const outEl=document.getElementById('prog-out');
+  if(outEl){outEl.className='ai-output-area';outEl.innerHTML='Generating '+count+' pages…';}
+  try{
+    const raw=await callAI('Generate '+count+' programmatic SEO pages for template "'+templateName+'" focused on "'+region+'".\n\nReturn ONLY a JSON array. Each item: {"title":"...","metaTitle":"...(under 60 chars)","metaDescription":"...(under 155 chars)","slug":"...","keyword":"...","content":"...(200-400 word article with ## headings)"}\n\nMake each page unique and keyword-targeted.',{system:'You are a programmatic SEO generator. Return only valid JSON array.',maxTokens:3000});
+    const pages=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    pages.forEach(function(p){
+      S.content.unshift({id:Date.now()+Math.random()*1000|0,title:p.title,metaTitle:p.metaTitle,metaDescription:p.metaDescription,slug:p.slug,keyword:p.keyword,content:p.content,collection:'Articles',status:'draft',wordCount:(p.content||'').split(/\s+/).length,aiScore:0,seoScore:0,author:'AI Generator',updated:Date.now(),tags:['prog-seo',templateName.toLowerCase().replace(/\s+/g,'-')]});
+    });
+    save('content');
+    if(outEl)outEl.textContent='Generated '+pages.length+' pages as drafts.';
+    toast(pages.length+' programmatic pages created ✓','success');
+  }catch(e){
+    if(outEl)outEl.textContent='Error: '+e.message;
+    toast('Generation failed','error');
+  }
+}
+window.runProgGenerate=runProgGenerate;
 
 /* ══════════════════════════════════════════════════════
    GEO / AI SEO — Generative Engine Optimization
@@ -5170,10 +5348,30 @@ function pgAnalytics(){
     </div>
   </div>`;
 
+  // Build usage chart from tracked events
+  const events=S._analyticsEvents||[];
+  const now=Date.now();const dayMs=86400000;
+  const last7=[];for(let d=6;d>=0;d--){
+    const dayStart=now-d*dayMs;const dayEnd=dayStart+dayMs;
+    const dayLabel=new Date(dayStart).toLocaleDateString('en',{weekday:'short'});
+    const aiCalls=events.filter(function(e){return e.type==='ai_call'&&e.ts>=dayStart&&e.ts<dayEnd;}).length;
+    const creates=events.filter(function(e){return e.type==='content_created'&&e.ts>=dayStart&&e.ts<dayEnd;}).length;
+    const updates=events.filter(function(e){return e.type==='content_updated'&&e.ts>=dayStart&&e.ts<dayEnd;}).length;
+    last7.push({day:dayLabel,ai:aiCalls,creates,updates});
+  }
+  const maxBar=Math.max(1,...last7.map(function(d){return d.ai+d.creates+d.updates;}));
+  const chartBars=last7.map(function(d){
+    const total=d.ai+d.creates+d.updates;const pct=Math.round(total/maxBar*100);
+    return '<div style="text-align:center;flex:1"><div style="height:80px;display:flex;align-items:flex-end;justify-content:center"><div style="width:70%;background:linear-gradient(var(--vi),var(--cy));border-radius:4px 4px 0 0;height:'+pct+'%;min-height:2px" title="'+total+' events"></div></div><div style="font-size:10px;color:var(--t3);margin-top:4px">'+d.day+'</div><div style="font-size:10px;color:var(--t2)">'+total+'</div></div>';
+  }).join('');
+  const totalAI=events.filter(function(e){return e.type==='ai_call'&&e.ts>=now-7*dayMs;}).length;
+  const totalCreated=events.filter(function(e){return e.type==='content_created'&&e.ts>=now-7*dayMs;}).length;
+  const usagePanel='<div class="panel" style="margin-bottom:18px"><div class="panel-hd"><div class="panel-title">📊 Usage This Week</div><span class="badge b-vi">'+totalAI+' AI calls · '+totalCreated+' created</span></div><div style="padding:16px;display:flex;gap:4px;align-items:flex-end">'+chartBars+'</div></div>';
+
   return`<div style="margin-bottom:22px">
     <div class="page-eyebrow">Performance & Insights</div>
     <h1 class="page-title">Analytics</h1>
-    <p class="page-sub">Connect Google Search Console or Plausible to see real organic traffic data alongside your content scores.</p>
+    <p class="page-sub">Real usage data from your workspace. Connect GSC or Plausible for organic traffic metrics.</p>
   </div>
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px" class="stagger">
     <div class="metric vi anim-pop"><div class="metric-top"><div class="metric-icon vi">📄</div></div><div class="metric-val vi">${published.length}</div><div class="metric-label">Published</div></div>
@@ -5181,6 +5379,7 @@ function pgAnalytics(){
     <div class="metric cy anim-pop"><div class="metric-top"><div class="metric-icon cy">🔍</div></div><div class="metric-val cy">${avgSEO}</div><div class="metric-label">Avg SEO Score</div></div>
     <div class="metric am anim-pop"><div class="metric-top"><div class="metric-icon am">🔑</div></div><div class="metric-val am">${S.keywords.length}</div><div class="metric-label">Tracked Keywords</div></div>
   </div>
+  ${usagePanel}
   ${gscPanel}
   ${plausiblePanel}
   ${contentTable}
@@ -6034,14 +6233,23 @@ async function suggestLinksFor(id){
 
 async function fixAllOrphans(){
   const orphans = S.content.filter(a=>a.status==='published').filter(a=>{
-    return !S.content.some(other=>other.status==='published'&&other.id!==a.id&&other.content?.includes(a.slug||''));
+    return !S.content.some(other=>other.status==='published'&&other.id!==a.id&&other.content?.includes(a.slug||a.title.toLowerCase().replace(/\s+/g,'-')));
   });
-  if(!orphans.length){toast('No orphans to fix','info');return;}
-  toast(`Finding link opportunities for ${orphans.length} orphaned articles…`,'info');
-  // Suggest for the first orphan to demonstrate
-  const first = orphans[0];
-  document.getElementById('interlink-article-sel')?.querySelectorAll('option').forEach(o=>{if(parseInt(o.value)===first.id)o.selected=true;});
-  await runInterlinkSuggestions();
+  if(!orphans.length){toast('No orphans found — all published content has inbound links','success');return;}
+  toast(`Generating link suggestions for ${Math.min(orphans.length,5)} orphaned articles…`,'info');
+  const published=S.content.filter(c=>c.status==='published');
+  const lib=published.slice(0,20).map(a=>'- "'+a.title+'" (slug: '+(a.slug||'')+')').join('\n');
+  const outEl=document.getElementById('interlink-out');
+  if(outEl){outEl.className='ai-output-area';outEl.innerHTML='Analyzing orphans…';}
+  let results='';
+  for(const orphan of orphans.slice(0,5)){
+    try{
+      const r=await callAI('Suggest 2 internal link opportunities for "'+orphan.title+'" from:\n'+lib+'\n\nFor each: target article, anchor text (2-4 words), where to place it.',{system:'You are an SEO interlinking specialist. Be concise.',maxTokens:300});
+      results+='\n\n### '+orphan.title+'\n'+r;
+    }catch(e){results+='\n\n### '+orphan.title+'\nError: '+e.message;}
+  }
+  if(outEl){outEl.textContent=results.trim();}
+  if(orphans.length>5)toast('Showed first 5 of '+orphans.length+' orphans','info');
   document.getElementById('orphan-section')?.scrollIntoView({behavior:'smooth'});
 }
 
@@ -7378,8 +7586,10 @@ function checkScheduledPublish(){
   let published=0;
   S.content.forEach(item=>{
     if(item.scheduledAt && item.scheduledAt<=now && item.status!=='published'){
+      if(!enforceQualityGates(item)){item.scheduledAt=null;return;}
       item.status='published';
       item.scheduledAt=null;
+      dispatchAutomation('content.published',item);
       item.publishDate=new Date().toISOString();
       item.updated=now;
       published++;
@@ -7819,6 +8029,7 @@ window.signOutConduit = signOutConduit;
 async function initConduit(){
   buildNav();
   updateCreditMeter();
+  trackEvent('session_start');
 
   if(!_sb){
     // No Supabase configured — run in localStorage-only mode

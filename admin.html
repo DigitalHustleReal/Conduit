@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Conduit — Admin Panel</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -183,7 +184,8 @@ function checkAuth(){
     sessionStorage.setItem('admin_authed','1');
     document.getElementById('auth-gate').style.display='none';
     document.getElementById('app').style.display='grid';
-    showPage('dashboard');
+    // Load Supabase data first, then show dashboard
+    loadFromSupabase().then(function(){showPage('dashboard');}).catch(function(){showPage('dashboard');});
   } else {
     const err = document.getElementById('auth-err');
     err.style.display='block';
@@ -208,27 +210,55 @@ function showPage(id){
   document.getElementById('page-content').innerHTML = pages[id]?.() || '<div style="color:var(--t3);padding:40px">Coming soon</div>';
 }
 
-/* ════════════ DATA — reads from all CMS workspaces in localStorage ════════════ */
-// In localStorage mode, all "users" share one browser — this shows own workspace.
-// When Supabase is live, replace these with real queries.
+/* ════════════ SUPABASE + DATA ════════════ */
+const _adminSbUrl='https://swctotzcjhnqyaddqxni.supabase.co';
+const _adminSbAnon='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN3Y3RvdHpjamhucXlhZGRxeG5pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDI2MTAsImV4cCI6MjA5MDAxODYxMH0.R55vhdQuRX41YY_NfaMdv60Q2kwowi901MCCF3-PJHw';
+let _adminSb=null;
+let _sbData=null;
+try{_adminSb=supabase.createClient(_adminSbUrl,_adminSbAnon);}catch(e){}
+
 function loadCMSState(){
   try{
     return {
-      siteName:     JSON.parse(localStorage.getItem('conduit_siteName')||'"Your Site"'),
-      pricingPlan:  JSON.parse(localStorage.getItem('conduit_pricingPlan')||'"free"'),
-      credits:      JSON.parse(localStorage.getItem('conduit_credits')||'{}'),
-      content:      JSON.parse(localStorage.getItem('conduit_content')||'[]'),
-      webhookLogs:  JSON.parse(localStorage.getItem('conduit_webhookLogs')||'[]'),
-      settings:     JSON.parse(localStorage.getItem('conduit_settings')||'{}'),
-      apiKey:       JSON.parse(localStorage.getItem('conduit_apiKey')||'null'),
-      qualityGates: JSON.parse(localStorage.getItem('conduit_qualityGates')||'[]'),
-      keywords:     JSON.parse(localStorage.getItem('conduit_keywords')||'[]'),
+      siteName:     JSON.parse(localStorage.getItem('conduit_siteName')||JSON.stringify(localStorage.getItem('prism3_siteName'))||'"Your Site"'),
+      pricingPlan:  JSON.parse(localStorage.getItem('conduit_pricingPlan')||JSON.stringify(localStorage.getItem('prism3_pricingPlan'))||'"free"'),
+      credits:      JSON.parse(localStorage.getItem('conduit_credits')||localStorage.getItem('prism3_credits')||'{}'),
+      content:      JSON.parse(localStorage.getItem('conduit_content')||localStorage.getItem('prism3_content')||'[]'),
+      webhookLogs:  JSON.parse(localStorage.getItem('conduit_webhookLogs')||localStorage.getItem('prism3_webhookLogs')||'[]'),
+      settings:     JSON.parse(localStorage.getItem('conduit_settings')||localStorage.getItem('prism3_settings')||'{}'),
+      apiKey:       JSON.parse(localStorage.getItem('conduit_apiKey')||localStorage.getItem('prism3_apiKey')||'null'),
+      qualityGates: JSON.parse(localStorage.getItem('conduit_qualityGates')||localStorage.getItem('prism3_qualityGates')||'[]'),
+      keywords:     JSON.parse(localStorage.getItem('conduit_keywords')||localStorage.getItem('prism3_keywords')||'[]'),
     };
   }catch(e){ return {}; }
 }
 
-// Simulated multi-user data for demo (replace with Supabase queries in production)
+async function loadFromSupabase(){
+  if(!_adminSb)return null;
+  try{
+    const [wsRes,contentRes,kwRes,profilesRes]=await Promise.all([
+      _adminSb.from('workspaces').select('*'),
+      _adminSb.from('content').select('id,workspace_id,title,status,ai_score,seo_score,created_at'),
+      _adminSb.from('keywords').select('id,workspace_id'),
+      _adminSb.from('profiles').select('*'),
+    ]);
+    if(!wsRes.data?.length)return null;
+    _sbData={workspaces:wsRes.data,content:contentRes.data||[],keywords:kwRes.data||[],profiles:profilesRes.data||[]};
+    return _sbData;
+  }catch(e){return null;}
+}
+
 function getSimulatedUsers(){
+  // Use Supabase data if available
+  if(_sbData&&_sbData.workspaces?.length){
+    return _sbData.workspaces.map(function(ws){
+      const profile=_sbData.profiles.find(function(p){return p.id===ws.owner_id;})||{};
+      const wsContent=_sbData.content.filter(function(c){return c.workspace_id===ws.id;});
+      const wsKeywords=_sbData.keywords.filter(function(k){return k.workspace_id===ws.id;});
+      return {id:ws.id,name:ws.name,email:profile.email||'—',plan:ws.plan||'free',credits:ws.credits_ai_calls||0,creditLimit:{free:10,pro:1000,business:10000}[ws.plan||'free']||10,content:wsContent.length,keywords:wsKeywords.length,apiKey:ws.settings?.apiKey?'Connected':'Platform',joined:new Date(ws.created_at).toLocaleDateString(),lastActive:new Date(ws.updated_at||ws.created_at).toLocaleDateString(),real:true};
+    });
+  }
+  // Fallback to localStorage
   const s = loadCMSState();
   return [
     {id:1, name:s.siteName||'Your Workspace', email:'admin@yourdomain.com', plan:s.pricingPlan||'free', credits:s.credits?.aiCalls||0, creditLimit:{'free':100,'pro':1000,'business':10000}[s.pricingPlan||'free']||100, content:s.content?.length||0, keywords:s.keywords?.length||0, apiKey:s.apiKey?'Connected':'—', joined:'2026-01-15', lastActive:'Today', real:true},

@@ -37,7 +37,7 @@ export function heuristicAIScore(item: ContentItem, allContent: ContentItem[]): 
   if (a.codeBlocks >= 1) s += 2;
 
   // Metadata (max 10)
-  if (item.tags?.length > 0) s += 2; if ((item.tags?.length || 0) >= 3) s += 2;
+  if ((item.tags?.length || 0) > 0) s += 2; if ((item.tags?.length || 0) >= 3) s += 2;
   if ((item.metaDescription || item.metaDesc || '').length > 50) s += 3;
   if ((item.metaTitle || item.seoTitle || '').length > 10) s += 3;
 

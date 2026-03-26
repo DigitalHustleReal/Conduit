@@ -1,11 +1,11 @@
 export interface ContentItem {
   id: number;
   title: string;
-  slug: string;
-  content: string;
+  slug?: string;
+  content?: string;
   body?: string;
   excerpt?: string;
-  collection: string;
+  collection?: string;
   author?: string;
   status: 'draft' | 'review' | 'published' | 'scheduled' | 'archived';
   keyword?: string;
@@ -13,7 +13,7 @@ export interface ContentItem {
   seoTitle?: string;
   metaDescription?: string;
   metaDesc?: string;
-  tags: string[];
+  tags?: string[];
   locale?: string;
   featuredImage?: string;
   ogImage?: string;

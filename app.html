@@ -761,6 +761,22 @@ const S={
   _agents:DB.get('_agents',{registry:{contentAutopilot:{enabled:false,running:false,lastRun:null,interval:null},seoGuardian:{enabled:false,running:false,lastRun:null,interval:300000},keywordOpportunity:{enabled:false,running:false,lastRun:null,interval:null},publishingPipeline:{enabled:false,running:false,lastRun:null,interval:120000},smartOnboarding:{enabled:false,running:false,lastRun:null,interval:null},healthMonitor:{enabled:false,running:false,lastRun:null,interval:600000},contentRefresh:{enabled:false,running:false,lastRun:null,interval:null},interlinkBuilder:{enabled:false,running:false,lastRun:null,interval:null}},history:[],queue:[],reports:{},onboarded:false}),
 };
 function save(k){
+  // Content versioning: save snapshot before overwriting
+  if(k==='content'&&S.content){
+    S.content.forEach(function(item){
+      if(!item._lastSaved||item.content!==item._lastSavedContent){
+        if(!S.contentHistory[item.id])S.contentHistory[item.id]=[];
+        if(item.content||item.body){
+          S.contentHistory[item.id].unshift({ts:Date.now(),wordCount:item.wordCount||0,title:item.title,snapshot:(item.content||item.body||'').slice(0,5000)});
+          if(S.contentHistory[item.id].length>10)S.contentHistory[item.id]=S.contentHistory[item.id].slice(0,10);
+        }
+        item._lastSavedContent=item.content||item.body||'';
+        item._lastSaved=Date.now();
+        item.updated=Date.now();// Timestamp for conflict detection
+      }
+    });
+    DB.set('contentHistory',S.contentHistory);
+  }
   DB.set(k,S[k]);
   // Async sync to Supabase (non-blocking)
   if(_sb && S.workspaceId) _syncToSupabase(k);
@@ -822,9 +838,14 @@ function _syncToSupabase(k){
           if(onConflictCol){
             await _sb.from(mapping.table).upsert(rows,{onConflict:onConflictCol,ignoreDuplicates:false});
           } else {
-            // For tables without unique constraint, fallback to delete+insert
-            await _sb.from(mapping.table).delete().eq('workspace_id', S.workspaceId);
-            await _sb.from(mapping.table).insert(rows);
+            // For tables without unique constraint: insert with generated IDs, then delete old
+            var insertResult = await _sb.from(mapping.table).insert(rows).select('id');
+            if(insertResult.error) throw insertResult.error;
+            // Only delete old rows AFTER successful insert (atomic safety)
+            var newIds = (insertResult.data||[]).map(function(r){return r.id;});
+            if(newIds.length > 0){
+              await _sb.from(mapping.table).delete().eq('workspace_id', S.workspaceId).not('id','in','('+newIds.join(',')+')');
+            }
           }
         } else {
           // Empty array = clear all rows for this workspace
@@ -1100,10 +1121,21 @@ function renderPage(p){
 
 /* ═══════════ CREDIT SYSTEM ═══════════ */
 function planLimits(){const m={free:{aiCalls:100,storage:500,apiReqs:1000,seats:1,socialPosts:10},pro:{aiCalls:1000,storage:10240,apiReqs:10000,seats:5,socialPosts:100},business:{aiCalls:10000,storage:102400,apiReqs:100000,seats:15,socialPosts:1000}};return m[S.pricingPlan]||m.free;}
+function isBYOK(){return!!(S.apiKey||S.settings.openaiKey||S.settings.geminiKey||S.settings.mistralKey||S.settings.groqKey);}
+function checkCreditReset(){
+  var now=Date.now();var resetDate=S.credits.resetDate||0;
+  if(now>=resetDate){
+    S.credits.aiCalls=0;S.credits.apiReqs=0;S.credits.socialPosts=0;
+    S.credits.resetDate=new Date(new Date().getFullYear(),new Date().getMonth()+1,1).getTime();
+    save('credits');
+  }
+}
 function deductCredit(type='aiCalls'){
+  if(isBYOK())return true;// BYOK users have unlimited credits
+  checkCreditReset();// Reset if new month
   const lim=planLimits();
   if((S.credits[type]||0)>=lim[type]){
-    toast('Credit limit reached for '+type+' — upgrade or add your API key','error');
+    toast('Credit limit reached for '+type+' — upgrade or add your API key in AI Engine','error');
     return false;
   }
   S.credits[type]=(S.credits[type]||0)+1;
@@ -1148,52 +1180,84 @@ function fleschKincaid(text){
 }
 
 function heuristicAIScore(item){
-  var s=25;
-  var wc=item.wordCount||(item.content||'').split(/\s+/).filter(Boolean).length;
-  if(wc>300)s+=8;if(wc>600)s+=8;if(wc>1000)s+=8;if(wc>1500)s+=5;
-  var content=item.content||'';
-  if(content.includes('## ')||/<h2/i.test(content))s+=7;
-  var h2Count=(content.match(/^##\s/gm)||[]).length;
-  if(h2Count>=3)s+=4;if(h2Count>=5)s+=3;
-  if(item.tags?.length>0)s+=4;if(item.tags?.length>3)s+=3;
+  // Rebalanced: structure/quality weighted equally with length
+  var s=15;
+  var content=item.content||item.body||'';
+  var wc=item.wordCount||content.split(/\s+/).filter(Boolean).length;
+  // Length (max 15 pts — reduced from 29)
+  if(wc>300)s+=4;if(wc>600)s+=4;if(wc>1000)s+=4;if(wc>1500)s+=3;
+  // Structure (max 18 pts — increased)
+  var h2Count=(content.match(/^##\s|<h2/gim)||[]).length;
+  if(h2Count>=1)s+=5;if(h2Count>=3)s+=5;if(h2Count>=5)s+=3;
+  // Lists/tables (structured content — NEW)
+  if(content.match(/^[-*]\s/gm)||content.match(/<[uo]l/i))s+=4;
+  if(content.match(/\|.*\|.*\|/)||content.match(/<table/i))s+=3;
+  // FAQ detection (NEW)
+  if(content.match(/^###?\s.*\?/gm))s+=4;
+  // Metadata (max 14 pts)
+  if(item.tags?.length>0)s+=3;if(item.tags?.length>3)s+=2;
   if((item.metaDescription||item.metaDesc||'').length>50)s+=5;
   if((item.metaTitle||item.seoTitle||'').length>10)s+=4;
-  if(item.keyword)s+=6;
+  // Keyword relevance (max 10 pts)
+  if(item.keyword)s+=5;
   if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=5;
-  // Readability bonus
+  // Readability (max 12 pts — increased from 11)
   var fk=fleschKincaid(content);
-  if(fk.ease>=60)s+=5;if(fk.ease>=70)s+=3;
+  if(fk.ease>=60)s+=5;if(fk.ease>=70)s+=4;
   if(fk.avgWordsPerSentence<=20)s+=3;
-  // Link bonus
-  var linkCount=((content).match(/\[.*?\]\(.*?\)/g)||[]).length+((content).match(/<a\s/gi)||[]).length;
+  // Variety: unique sentence starters (NEW — catches AI repetition)
+  var sentences=content.split(/[.!?]+/).filter(function(s){return s.trim().length>10;});
+  if(sentences.length>=5){
+    var starters=sentences.map(function(s){return s.trim().split(/\s+/)[0]?.toLowerCase();});
+    var unique=starters.filter(function(v,i,a){return a.indexOf(v)===i;});
+    if(unique.length/starters.length>0.6)s+=4;// 60%+ unique starters
+  }
+  // Links (max 5 pts)
+  var linkCount=(content.match(/\[.*?\]\(.*?\)/g)||[]).length+(content.match(/<a\s/gi)||[]).length;
   if(linkCount>=2)s+=3;if(linkCount>=5)s+=2;
-  // Store readability on item for display
   item._readability=fk;
   return Math.min(98,Math.max(0,s));
 }
 function heuristicSEOScore(item){
-  var s=10;
+  // Rebalanced: meta/keyword/structure weighted more, word count reduced
+  var s=5;
   var mt=(item.metaTitle||item.seoTitle||'');
   var md=(item.metaDescription||item.metaDesc||'');
-  if(mt.length>=10&&mt.length<=60)s+=15;else if(mt.length>0)s+=6;
-  if(md.length>=50&&md.length<=155)s+=15;else if(md.length>0)s+=6;
-  if(item.keyword)s+=10;
-  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=8;
+  var content=item.content||item.body||'';
+  // Meta title (max 14 pts — widened range to 10-70 chars)
+  if(mt.length>=10&&mt.length<=70)s+=14;else if(mt.length>0)s+=5;
+  // Meta description (max 14 pts — widened to 50-160)
+  if(md.length>=50&&md.length<=160)s+=14;else if(md.length>0)s+=5;
+  // Target keyword (max 12 pts)
+  if(item.keyword)s+=7;
+  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=5;
+  // Keyword in first 100 words (5 pts)
+  if(item.keyword){var first100=content.split(/\s+/).slice(0,100).join(' ').toLowerCase();if(first100.includes(item.keyword.toLowerCase()))s+=5;}
+  // Keyword density check (NEW — 3 pts)
+  if(item.keyword&&content.length>200){
+    var kwLower=item.keyword.toLowerCase();var bodyLower=content.toLowerCase();
+    var kwCount=(bodyLower.split(kwLower).length-1);var totalWords=content.split(/\s+/).length;
+    var density=kwCount/totalWords*100;
+    if(density>=0.5&&density<=2.5)s+=3;// Healthy density
+  }
+  // Slug (5 pts)
   if(item.slug)s+=5;
-  var content=item.content||'';
-  if(content.includes('## ')||/<h2/i.test(content))s+=7;
-  var wc=item.wordCount||(content).split(/\s+/).filter(Boolean).length;
-  if(wc>500)s+=6;if(wc>1000)s+=5;if(wc>1500)s+=3;
-  // Keyword in first 100 words
-  if(item.keyword){var first100=(content).split(/\s+/).slice(0,100).join(' ').toLowerCase();if(first100.includes(item.keyword.toLowerCase()))s+=5;}
-  // Internal links
-  var linkCount=((content).match(/\[.*?\]\(.*?\)/g)||[]).length;
-  if(linkCount>=1)s+=4;if(linkCount>=3)s+=3;
-  // Image alt text
-  if(((content).match(/alt=["'][^"']+["']/g)||[]).length>0)s+=3;
-  // Readability factor
+  // Heading structure (max 8 pts)
+  var h2Count=(content.match(/^##\s|<h2/gim)||[]).length;
+  if(h2Count>=1)s+=5;if(h2Count>=3)s+=3;
+  // Word count (max 8 pts — reduced from 14)
+  var wc=item.wordCount||content.split(/\s+/).filter(Boolean).length;
+  if(wc>500)s+=3;if(wc>1000)s+=3;if(wc>1500)s+=2;
+  // Internal links (max 6 pts)
+  var linkCount=(content.match(/\[.*?\]\(.*?\)/g)||[]).length;
+  if(linkCount>=1)s+=3;if(linkCount>=3)s+=3;
+  // Images (max 5 pts — increased)
+  var imgCount=(content.match(/<img|!\[/g)||[]).length;
+  if(imgCount>=1)s+=3;
+  if((content.match(/alt=["'][^"']+["']/g)||[]).length>0)s+=2;
+  // Readability (max 4 pts)
   var fk=fleschKincaid(content);
-  if(fk.ease>=50)s+=3;
+  if(fk.ease>=50)s+=2;if(fk.ease>=60)s+=2;
   return Math.min(98,Math.max(0,s));
 }
 
@@ -1368,9 +1432,12 @@ async function callAI(prompt, options={}){
 
   if(!apiKey) throw new Error(`No API key for ${prov?.name||provider}. Go to AI Engine to add your key.`);
 
-  // Check credits
-  const lim=planLimits();
-  if((S.credits.aiCalls||0)>=lim.aiCalls) throw new Error(`Credit limit reached (${lim.aiCalls}/mo). Upgrade or buy credits in Settings & Billing.`);
+  // Check credits (BYOK users bypass limits)
+  if(!isBYOK()){
+    checkCreditReset();
+    const lim=planLimits();
+    if((S.credits.aiCalls||0)>=lim.aiCalls) throw new Error('Credit limit reached ('+lim.aiCalls+'/mo). Add your API key in AI Engine (free forever) or upgrade in Settings & Billing.');
+  }
 
   let responseText = '';
 
@@ -5460,13 +5527,14 @@ function pgAnalytics(){
   const contentTable = `<div class="panel" style="margin-bottom:18px">
     <div class="panel-hd"><div class="panel-title">📄 Content Performance</div><span class="badge b-vi">${published.length} published</span></div>
     <div style="padding:0">
-      <table><thead><tr><th>Title</th><th>Collection</th><th>AI Score</th><th>SEO Score</th><th>Words</th><th>Status</th></tr></thead><tbody>
+      <table><thead><tr><th>Title</th><th>Collection</th><th>AI Score</th><th>SEO Score</th><th>Words</th><th>Readability</th><th>Status</th></tr></thead><tbody>
         ${topContent.map(c=>`<tr>
           <td><div class="td-main" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.title}</div></td>
           <td><span class="badge b-dim" style="font-size:10px">${c.collection}</span></td>
           <td><div style="display:flex;align-items:center;gap:6px"><div style="width:40px;height:5px;background:var(--c3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${c.aiScore||0}%;background:${(c.aiScore||0)>=80?'var(--gr)':'var(--am)'};border-radius:3px"></div></div><span style="font-size:11px;color:var(--t2)">${c.aiScore||0}</span></div></td>
           <td><div style="display:flex;align-items:center;gap:6px"><div style="width:40px;height:5px;background:var(--c3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${c.seoScore||0}%;background:${(c.seoScore||0)>=70?'var(--gr)':'var(--am)'};border-radius:3px"></div></div><span style="font-size:11px;color:var(--t2)">${c.seoScore||0}</span></div></td>
           <td><span style="font-size:11.5px;color:var(--t2)">${(c.wordCount||0).toLocaleString()}</span></td>
+          <td><span style="font-size:11px;color:${(c._readability?.ease||0)>=60?'var(--gr)':(c._readability?.ease||0)>=40?'var(--am)':'var(--re)'}">${c._readability?Math.round(c._readability.ease)+'  ('+c._readability.level+')':'—'}</span></td>
           <td><span class="badge ${c.status==='published'?'b-gr':c.status==='review'?'b-am':'b-dim'}">${c.status}</span></td>
         </tr>`).join('')}
       </tbody></table>
@@ -8347,8 +8415,15 @@ async function runAgentChain(chainId,item){
   for(var i=0;i<chain.steps.length;i++){
     var step=chain.steps[i];
     if(progEl)progEl.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div style="width:12px;height:12px;border:2px solid var(--vi);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>Step '+(i+1)+'/'+chain.steps.length+': '+step.label+'…</div>';
-    var stepResult=await runMicroAgent(step.agent,item);
-    results.push({step:step.agent,label:step.label,result:stepResult});
+    try{
+      var stepResult=await runMicroAgent(step.agent,item);
+      results.push({step:step.agent,label:step.label,result:stepResult,status:'success'});
+    }catch(stepErr){
+      console.warn('Chain step failed:',step.agent,stepErr.message);
+      results.push({step:step.agent,label:step.label,result:'Error: '+stepErr.message,status:'failed'});
+      agentLog(chainId,'step_failed',{step:step.agent,error:stepErr.message},0);
+      // Continue to next step — don't break the chain
+    }
   }
   agentLog(chainId,'chain_complete',{steps:chain.steps.length},0);
   if(progEl)progEl.innerHTML='<span style="color:var(--gr)">✅ Chain complete — '+results.length+' steps executed</span>';
@@ -8409,11 +8484,25 @@ function metaAgentOptimizer(){
 }
 
 /* ── Agent Init ── */
+function safeAgentRun(id,fn){
+  return function(){
+    try{fn();}catch(e){
+      console.warn('Agent '+id+' error:',e.message||e);
+      agentLog(id,'error',{message:e.message||String(e)},0);
+      // Disable agent after 3 consecutive errors to prevent spam
+      var recent=S._agents.history.filter(function(h){return h.agentId===id&&h.action==='error';}).slice(0,3);
+      if(recent.length>=3&&recent[2].ts>Date.now()-300000){
+        agentSetEnabled(id,false);
+        toast('Agent '+id+' disabled after 3 errors','error');
+      }
+    }
+  };
+}
 function initAgents(){
   var reg=S._agents.registry;
   Object.keys(reg).forEach(function(id){
     if(reg[id].enabled&&reg[id].interval&&AGENT_FNS[id]){
-      _agentTimers[id]=setInterval(AGENT_FNS[id],reg[id].interval);
+      _agentTimers[id]=setInterval(safeAgentRun(id,AGENT_FNS[id]),reg[id].interval);
     }
   });
   if(!S._agents.onboarded&&S.content.length<=3&&S.keywords.length<=5&&_sb){
@@ -8456,10 +8545,17 @@ async function agentConductor(){
   var lowSEO=S.content.filter(function(c){return c.status==='published'&&(c.seoScore||0)<50;});
   var stale=S.content.filter(function(c){return c.status==='published'&&c.updated&&(Date.now()-c.updated)>ap.rules.auto_refresh_days*86400000;});
   var undistributed=S.content.filter(function(c){return c.status==='published'&&!agentRecall('distribution-done',String(c.id));});
-  // Allocate budgets
-  var seoBudget=Math.max(1,Math.floor(remaining*0.3));
-  var contentBudget=Math.max(1,Math.floor(remaining*0.4));
-  var distBudget=Math.max(1,Math.floor(remaining*0.2));
+  // Allocate budgets (weighted by need + feedback effectiveness)
+  var eff=calcAgentEffectiveness();
+  var seoNeed=Math.max(1,lowSEO.length*3+noMeta.length*2);
+  var contentNeed=Math.max(1,gaps.length*2);
+  var distNeed=Math.max(1,undistributed.length);
+  var maintNeed=Math.max(1,stale.length);
+  var totalNeed=seoNeed+contentNeed+distNeed+maintNeed;
+  // Dynamic budget split based on actual needs (not hardcoded 30/40/20/10)
+  var seoBudget=Math.max(1,Math.floor(remaining*(seoNeed/totalNeed)));
+  var contentBudget=Math.max(1,Math.floor(remaining*(contentNeed/totalNeed)));
+  var distBudget=Math.max(1,Math.floor(remaining*(distNeed/totalNeed)));
   var maintBudget=Math.max(0,remaining-seoBudget-contentBudget-distBudget);
   // Run Directors based on schedule
   if(ap.schedule.seo_days.indexOf(dayOfWeek)>=0||lowSEO.length>3||noMeta.length>0){
@@ -8517,6 +8613,19 @@ async function directorSEO(budget){
     if(!item.slug&&item.title){
       item.slug=item.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
       save('content');result.issues_fixed++;
+    }
+    // Recalculate readability (FREE)
+    if(!item._readability&&(item.content||item.body)){
+      item._readability=fleschKincaid(item.content||item.body||'');
+      item.aiScore=heuristicAIScore(item);
+      item.seoScore=heuristicSEOScore(item);
+      save('content');
+    }
+    // Missing tags — auto-generate (1 credit)
+    if((!item.tags||item.tags.length===0)&&autopilotBudgetCheck(1)){
+      var tagResult=await runMicroAgent('auto-tag-gen',item);
+      if(Array.isArray(tagResult)){item.tags=tagResult;save('content');result.issues_fixed++;}
+      autopilotSpend(1,'seo','auto-tag-gen');result.credits_used++;
     }
     // Low SEO score — fix headings (1 credit)
     if((item.seoScore||0)<50&&autopilotBudgetCheck(1)&&S._autopilot.rules.auto_fix_seo){

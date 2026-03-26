@@ -7,10 +7,11 @@ Conduit is the operating system for content-first businesses. Not another SEO to
 Give every content creator, publisher, and small agency the power of a 10-person content team through autonomous AI agents, without requiring enterprise budgets or technical expertise.
 
 ## Target Market
-- Indian content publishers (finance, tech, comparison sites)
+- Content publishers in any niche, any geography
 - Solo creators scaling from 1 to 100+ articles/month
 - Small agencies managing 5-20 client sites
 - Niche site builders (programmatic SEO, affiliate content)
+- Finance, tech, health, travel, education — any vertical
 
 ## Competitive Position
 Conduit does NOT compete with Ahrefs/SEMrush on SERP data. It competes on AI-powered content operations — the space between "keyword found" and "article ranking."
@@ -179,5 +180,5 @@ RESEND_API_KEY             — Email API key
 6. **PageSpeed Insights** — Core Web Vitals in Analytics
 7. **Readability scoring** — Flesch-Kincaid algorithm (local, no API)
 8. **White-label mode** — custom branding per workspace
-9. **investingpro.in integration** — headless publishing via API
+9. **Headless CMS integrations** — connect any frontend via /api/content
 10. **Marketplace** — premium prompts, agent templates, schemas

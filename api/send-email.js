@@ -36,7 +36,7 @@ function welcomeEmail(to, workspaceName) {
       <h1 style="color:#6C63FF;margin:0 0 8px;font-size:24px">Welcome to Conduit \u2726</h1>
       <p style="color:#8B9EC4;line-height:1.6;margin:16px 0">Your workspace <strong style="color:#F0F4FF">${workspaceName}</strong> is ready.</p>
       <p style="color:#8B9EC4;line-height:1.6;margin:0">You have <strong style="color:#00D084">10 free AI calls</strong> to get started.</p>
-      ${ctaButton('Open My Workspace', 'https://getconduit.io/app.html')}
+      ${ctaButton('Open My Workspace', '${process.env.SITE_URL || 'https://conduit-woad.vercel.app'}/app.html')}
       <div style="margin-top:28px;padding:16px;background:#0E1420;border-radius:8px">
         <p style="color:#F0F4FF;font-size:13px;font-weight:600;margin:0 0 10px">\u{1F680} First steps:</p>
         <ol style="color:#8B9EC4;font-size:13px;line-height:1.8;margin:0;padding-left:18px">
@@ -66,7 +66,7 @@ function usageWarningEmail(to, used, limit) {
         <p style="color:#8B9EC4;font-size:13px;line-height:1.6;margin:0 0 6px"><strong style="color:#00D084">Option A:</strong> Add your own Claude API key in AI Engine \u2014 free forever</p>
         <p style="color:#8B9EC4;font-size:13px;line-height:1.6;margin:0"><strong style="color:#6C63FF">Option B:</strong> Upgrade to Pro \u2014 1,000 calls/month</p>
       </div>
-      ${ctaButton('Upgrade Now', 'https://getconduit.io/app.html#settings')}
+      ${ctaButton('Upgrade Now', '${process.env.SITE_URL || 'https://conduit-woad.vercel.app'}/app.html#settings')}
     `),
   };
 }
@@ -87,7 +87,7 @@ function upgradeConfirmEmail(to, plan, amount) {
         <li>All premium features</li>
         <li>Priority support</li>
       </ul>
-      ${ctaButton('Open Conduit', 'https://getconduit.io/app.html')}
+      ${ctaButton('Open Conduit', '${process.env.SITE_URL || 'https://conduit-woad.vercel.app'}/app.html')}
     `),
   };
 }

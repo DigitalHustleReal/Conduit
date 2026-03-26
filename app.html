@@ -1379,6 +1379,7 @@ async function callAI(prompt, options={}){
         body:JSON.stringify(reqBody)
       });
     }
+    if(!r.ok){var errText=await r.text().catch(function(){return r.statusText;});throw new Error('HTTP '+r.status+': '+errText.slice(0,200));}
     const d = await r.json();
     if(d.error) throw new Error(d.error.message || d.error);
     responseText = d.content?.[0]?.text || '';
@@ -1389,6 +1390,7 @@ async function callAI(prompt, options={}){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey},
       body:JSON.stringify({model,max_tokens:maxTok,messages:[{role:'system',content:system},{role:'user',content:prompt}]})
     });
+    if(!r.ok){var errText2=await r.text().catch(function(){return r.statusText;});throw new Error('OpenAI HTTP '+r.status+': '+errText2.slice(0,200));}
     const d = await r.json();
     if(d.error) throw new Error(d.error.message);
     responseText = d.choices?.[0]?.message?.content || '';
@@ -1399,6 +1401,7 @@ async function callAI(prompt, options={}){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({contents:[{role:'user',parts:[{text:system+'\n\n'+prompt}]}],generationConfig:{maxOutputTokens:maxTok}})
     });
+    if(!r.ok){var errText3=await r.text().catch(function(){return r.statusText;});throw new Error('Gemini HTTP '+r.status+': '+errText3.slice(0,200));}
     const d = await r.json();
     if(d.error) throw new Error(d.error.message || d.error.status);
     responseText = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -1409,6 +1412,7 @@ async function callAI(prompt, options={}){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey},
       body:JSON.stringify({model,max_tokens:maxTok,messages:[{role:'system',content:system},{role:'user',content:prompt}]})
     });
+    if(!r.ok){var errText4=await r.text().catch(function(){return r.statusText;});throw new Error('Mistral HTTP '+r.status+': '+errText4.slice(0,200));}
     const d = await r.json();
     if(d.error) throw new Error(d.error.message);
     responseText = d.choices?.[0]?.message?.content || '';
@@ -1419,6 +1423,7 @@ async function callAI(prompt, options={}){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey},
       body:JSON.stringify({model,max_tokens:maxTok,messages:[{role:'system',content:system},{role:'user',content:prompt}]})
     });
+    if(!r.ok){var errText5=await r.text().catch(function(){return r.statusText;});throw new Error('Groq HTTP '+r.status+': '+errText5.slice(0,200));}
     const d = await r.json();
     if(d.error) throw new Error(d.error.message || JSON.stringify(d.error));
     responseText = d.choices?.[0]?.message?.content || '';
@@ -4691,7 +4696,7 @@ function pgAutomations(){
     <div><label style="font-size:9.5px;color:var(--t3);font-family:'Fira Code',monospace;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:5px">When this happens</label><select class="field-select" id="new-trigger">${TRIGGERS.map(t=>`<option>${t}</option>`).join('')}</select></div>
     <div style="font-size:20px;color:var(--vi);padding-bottom:8px">→</div>
     <div><label style="font-size:9.5px;color:var(--t3);font-family:'Fira Code',monospace;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:5px">Do this</label><select class="field-select" id="new-action">${ACTIONS.map(a=>`<option>${a}</option>`).join('')}</select></div>
-    <button class="btn btn-primary" onclick="saveAuto()">Create</button>
+    <button class="btn btn-primary" onclick="addAuto()">Create</button>
   </div></div></div>
   <div style="margin-top:20px"><div class="page-eyebrow" style="margin-bottom:10px">Automation Ideas</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">${[
     {t:'Publish → Deploy','d':'Trigger Vercel redeploy every time content is published.'},
@@ -7715,7 +7720,7 @@ function checkScheduledPublish(){
 }
 // Run on load + every 60 seconds
 checkScheduledPublish();
-setInterval(checkScheduledPublish, 60000);
+var _scheduledPublishTimer = setInterval(checkScheduledPublish, 60000);
 
 /* ══════════════════════════════════════════════════════
    AI AGENTS SYSTEM

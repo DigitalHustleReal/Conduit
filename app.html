@@ -632,6 +632,7 @@ kbd{font-family:'Fira Code',monospace;font-size:10px;background:var(--c3);paddin
         <span class="cm-ico">🔮</span>
         <div><div class="cm-label" id="cm-label">AI: 0/100</div><div class="cm-bar"><div class="cm-fill cm-ok" id="cm-fill" style="width:0%"></div></div></div>
       </div>
+      <div id="agent-widget" onclick="go('agents')" title="AI Agents" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--c2);border:1px solid var(--br);border-radius:var(--r8);cursor:pointer;font-size:11px;color:var(--t2)"><span>🤖</span><span id="agent-widget-label">0 agents</span></div>
       <button class="btn btn-secondary btn-sm" onclick="go('media')">📎 Media</button>
       <button class="btn btn-primary btn-sm" onclick="openNewContent()">+ New Content</button>
       <button onclick="signOutConduit()" class="btn btn-ghost btn-sm" id="signout-btn" style="font-size:11.5px;display:none">Sign out</button>
@@ -712,6 +713,7 @@ const S={
     {id:4,trigger:'keyword.top5',action:'create_related_draft',enabled:false},
   ]),
   _analyticsEvents:DB.get('analyticsEvents',[]),
+  _agents:DB.get('_agents',{registry:{contentAutopilot:{enabled:false,running:false,lastRun:null,interval:null},seoGuardian:{enabled:false,running:false,lastRun:null,interval:300000},keywordOpportunity:{enabled:false,running:false,lastRun:null,interval:null},publishingPipeline:{enabled:false,running:false,lastRun:null,interval:120000},smartOnboarding:{enabled:false,running:false,lastRun:null,interval:null},healthMonitor:{enabled:false,running:false,lastRun:null,interval:600000},contentRefresh:{enabled:false,running:false,lastRun:null,interval:null},interlinkBuilder:{enabled:false,running:false,lastRun:null,interval:null}},history:[],queue:[],reports:{},onboarded:false}),
 };
 function save(k){
   DB.set(k,S[k]);
@@ -892,6 +894,7 @@ const NAV=[
   {id:'prompt-library',ico:'⚡',label:'Prompt Library',group:'Intelligence'},
   {id:'seo',ico:'🔍',label:'SEO Center',group:'Intelligence',key:'keywords'},
   {id:'analytics',ico:'📈',label:'Analytics',group:'Intelligence'},
+  {id:'agents',ico:'🤖',label:'AI Agents',group:'Intelligence'},
   {id:'geo-seo',ico:'🤖',label:'AI SEO / GEO',group:'SEO Tools'},
   {id:'prog-seo',ico:'📐',label:'Programmatic SEO',group:'SEO Tools'},
   {id:'algo-updates',ico:'📡',label:'Algorithm Radar',group:'SEO Tools'},
@@ -917,7 +920,7 @@ const NAV=[
   {id:'featured-img',ico:'✨',label:'Featured Images',group:'Visuals'},
   {id:'infographics',ico:'📊',label:'Infographic Builder',group:'Visuals'},
 ];
-const TITLES={dashboard:'Dashboard',chat:'AI Chat',collections:'Collections',editor:'Content Library',media:'Media Library','ai-studio':'AI Studio',seo:'SEO Center',analytics:'Analytics',templates:'Template Gallery','prompt-library':'Prompt Library','geo-seo':'AI SEO & GEO','prog-seo':'Programmatic SEO','algo-updates':'Algorithm Radar',pipeline:'Content Pipeline',localization:'Localization',automations:'Automations',webhooks:'Webhooks & API','api-playground':'API Playground',integrations:'Integrations & Plugins','api-core':'AI Core API',team:'Team & Roles','ai-engine':'AI Engine','settings':'Settings & Billing','monetisation':'Monetisation','interlinks':'Content Links','creator':'Creator Studio','yt-research':'Video Research','yt-script':'Script Writer','yt-shorts':'Shorts & Reels','yt-seo':'Video SEO',visuals:'Visual Studio',thumbnails:'Thumbnail Maker','featured-img':'Featured Images',infographics:'Infographic Builder'};
+const TITLES={dashboard:'Dashboard',chat:'AI Chat',collections:'Collections',editor:'Content Library',media:'Media Library','ai-studio':'AI Studio',seo:'SEO Center',analytics:'Analytics',agents:'AI Agents',templates:'Template Gallery','prompt-library':'Prompt Library','geo-seo':'AI SEO & GEO','prog-seo':'Programmatic SEO','algo-updates':'Algorithm Radar',pipeline:'Content Pipeline',localization:'Localization',automations:'Automations',webhooks:'Webhooks & API','api-playground':'API Playground',integrations:'Integrations & Plugins','api-core':'AI Core API',team:'Team & Roles','ai-engine':'AI Engine','settings':'Settings & Billing','monetisation':'Monetisation','interlinks':'Content Links','creator':'Creator Studio','yt-research':'Video Research','yt-script':'Script Writer','yt-shorts':'Shorts & Reels','yt-seo':'Video SEO',visuals:'Visual Studio',thumbnails:'Thumbnail Maker','featured-img':'Featured Images',infographics:'Infographic Builder'};
 
 /* ═══════════ NAV — TWO-TIER FOCUS/FULL ═══════════ */
 const NAV_FOCUS = new Set(DB.get('navFocusTier', [
@@ -1035,7 +1038,7 @@ function go(page){
 }
 
 function renderPage(p){
-  const pages={dashboard:pgDashboard,collections:pgCollections,editor:pgEditor,media:pgMedia,'ai-studio':pgAIStudio,seo:pgSEO,analytics:pgAnalytics,templates:pgTemplates,'prompt-library':pgPromptLibrary,'geo-seo':pgGEOSEO,'prog-seo':pgProgSEO,'algo-updates':pgAlgoUpdates,pipeline:pgPipeline,localization:pgLocalization,automations:pgAutomations,webhooks:pgWebhooks,'api-playground':pgAPIPlayground,templates:pgTemplates,'prompt-library':pgPromptLibrary,integrations:pgIntegrations,'api-core':pgAPICore,team:pgTeam,'ai-engine':pgAIEngine,settings:pgSettingsBilling,monetisation:pgMonetisation,interlinks:pgInterlinks,creator:pgCreator,'yt-research':pgYTResearch,'yt-script':pgYTScript,'yt-shorts':pgYTShorts,'yt-seo':pgYTSEO,visuals:pgVisuals,thumbnails:pgThumbnails,'featured-img':pgFeaturedImg,infographics:pgInfographics};
+  const pages={dashboard:pgDashboard,collections:pgCollections,editor:pgEditor,media:pgMedia,'ai-studio':pgAIStudio,seo:pgSEO,analytics:pgAnalytics,agents:pgAgents,templates:pgTemplates,'prompt-library':pgPromptLibrary,'geo-seo':pgGEOSEO,'prog-seo':pgProgSEO,'algo-updates':pgAlgoUpdates,pipeline:pgPipeline,localization:pgLocalization,automations:pgAutomations,webhooks:pgWebhooks,'api-playground':pgAPIPlayground,templates:pgTemplates,'prompt-library':pgPromptLibrary,integrations:pgIntegrations,'api-core':pgAPICore,team:pgTeam,'ai-engine':pgAIEngine,settings:pgSettingsBilling,monetisation:pgMonetisation,interlinks:pgInterlinks,creator:pgCreator,'yt-research':pgYTResearch,'yt-script':pgYTScript,'yt-shorts':pgYTShorts,'yt-seo':pgYTSEO,visuals:pgVisuals,thumbnails:pgThumbnails,'featured-img':pgFeaturedImg,infographics:pgInfographics};
   return(pages[p]||pgDashboard)();
 }
 
@@ -1778,6 +1781,7 @@ function pgDashboard(){
     </div>
     ${noKey}
     ${chatBanner}
+    ${(function(){var h=S._agents.reports.healthMonitor;if(!h)return'';var c=h.overallScore>70?'gr':h.overallScore>40?'am':'re';return'<div class="panel" style="margin-bottom:16px;cursor:pointer" onclick="go(\'agents\')"><div class="panel-hd"><div class="panel-title">💚 Workspace Health</div><span class="badge b-'+c+'">'+h.overallScore+'/100</span></div><div style="padding:10px 14px;display:flex;gap:14px;flex-wrap:wrap">'+h.checks.map(function(k){return'<div style="display:flex;align-items:center;gap:5px;font-size:11px"><div style="width:7px;height:7px;border-radius:50%;background:var(--'+k.color+')"></div><span style="color:var(--t2)">'+k.name+': <strong style="color:var(--t1)">'+k.score+'</strong></span></div>';}).join('')+'</div></div>';})()}
     <div class="metrics">
       <div class="metric vi" onclick="go('editor')">
         <div class="metric-top"><div class="metric-icon vi">📄</div><span class="metric-delta delta-up">+${S.content.length}</span></div>
@@ -7607,6 +7611,344 @@ function checkScheduledPublish(){
 checkScheduledPublish();
 setInterval(checkScheduledPublish, 60000);
 
+/* ══════════════════════════════════════════════════════
+   AI AGENTS SYSTEM
+══════════════════════════════════════════════════════ */
+var _agentTimers={};
+
+function agentLog(id,action,result,credits){
+  S._agents.history.unshift({agentId:id,action:action,ts:Date.now(),result:result,creditsUsed:credits||0});
+  if(S._agents.history.length>500)S._agents.history=S._agents.history.slice(0,500);
+  save('_agents');trackEvent('agent_run',null,{agent:id,action:action});
+}
+function agentStart(id){
+  if(!S._agents.registry[id])return;
+  S._agents.registry[id].running=true;S._agents.registry[id].lastRun=Date.now();
+  save('_agents');updateAgentWidget();
+}
+function agentStop(id){
+  if(!S._agents.registry[id])return;
+  S._agents.registry[id].running=false;
+  if(_agentTimers[id]){clearInterval(_agentTimers[id]);delete _agentTimers[id];}
+  save('_agents');updateAgentWidget();
+}
+function agentSetEnabled(id,enabled){
+  if(!S._agents.registry[id])return;
+  S._agents.registry[id].enabled=enabled;
+  if(enabled&&S._agents.registry[id].interval){
+    var fn=AGENT_FNS[id];
+    if(fn){_agentTimers[id]=setInterval(fn,S._agents.registry[id].interval);fn();}
+  }else if(!enabled&&_agentTimers[id]){
+    clearInterval(_agentTimers[id]);delete _agentTimers[id];
+  }
+  S._agents.registry[id].running=false;
+  save('_agents');updateAgentWidget();
+  if(S.page==='agents')go('agents');
+}
+function updateAgentWidget(){
+  var running=Object.values(S._agents.registry).filter(function(a){return a.enabled;}).length;
+  var el=document.getElementById('agent-widget-label');
+  if(el)el.textContent=running?running+' active':'0 agents';
+  if(el)el.style.color=running?'var(--gr)':'var(--t3)';
+}
+
+var AGENT_FNS={};
+
+/* ── Agent 2: SEO Guardian (heuristic scan) ── */
+function agentSEOGuardian(){
+  agentStart('seoGuardian');
+  var published=S.content.filter(function(c){return c.status==='published';});
+  var issues=[];
+  published.forEach(function(item){
+    var wc=item.wordCount||0;
+    if(wc<500)issues.push({id:item.id,type:'thin_content',title:item.title,detail:wc+' words',fix:'Expand content to 500+ words'});
+    if(!(item.metaTitle||item.seoTitle))issues.push({id:item.id,type:'missing_meta_title',title:item.title,detail:'No meta title',fix:'Generate meta title'});
+    if(!(item.metaDescription||item.metaDesc))issues.push({id:item.id,type:'missing_meta_desc',title:item.title,detail:'No meta description',fix:'Generate meta description'});
+    if(!item.keyword&&!item.targetKeyword)issues.push({id:item.id,type:'no_keyword',title:item.title,detail:'No target keyword',fix:'Assign keyword'});
+    if((item.seoScore||0)<50)issues.push({id:item.id,type:'low_seo_score',title:item.title,detail:'Score: '+(item.seoScore||0),fix:'Optimize SEO elements'});
+    var linkCount=((item.content||'').match(/\[.*?\]\(.*?\)/g)||[]).length+((item.content||'').match(/<a\s/gi)||[]).length;
+    if(linkCount===0)issues.push({id:item.id,type:'no_internal_links',title:item.title,detail:'0 links',fix:'Add internal links'});
+  });
+  S._agents.reports.seoGuardian={ts:Date.now(),issues:issues,scanned:published.length};
+  agentLog('seoGuardian','scan',{issueCount:issues.length,scanned:published.length},0);
+  agentStop('seoGuardian');
+  if(issues.length>0)toast('SEO Guardian: '+issues.length+' issues in '+published.length+' articles','info');
+}
+AGENT_FNS.seoGuardian=agentSEOGuardian;
+
+async function seoGuardianFix(itemId,issueType){
+  var item=S.content.find(function(c){return c.id===itemId;});if(!item)return;
+  try{
+    if(issueType==='missing_meta_desc'){
+      var desc=await callAI('Write a compelling meta description under 155 characters for: "'+item.title+'". Content: '+(item.content||'').slice(0,300),{maxTokens:100,system:'SEO copywriter. Return only the meta description text.'});
+      item.metaDescription=desc.slice(0,160);item.metaDesc=item.metaDescription;
+    }else if(issueType==='missing_meta_title'){
+      var title=await callAI('Write an SEO-optimized meta title under 60 characters for: "'+item.title+'"',{maxTokens:80,system:'SEO copywriter. Return only the title.'});
+      item.metaTitle=title.slice(0,65);item.seoTitle=item.metaTitle;
+    }else if(issueType==='no_keyword'){
+      var kw=await callAI('Suggest the single best target keyword for an article titled "'+item.title+'". Return only the keyword, nothing else.',{maxTokens:30,system:'SEO specialist.'});
+      item.keyword=kw.trim().toLowerCase();item.targetKeyword=item.keyword;
+    }
+    item.seoScore=heuristicSEOScore(item);item.aiScore=heuristicAIScore(item);
+    save('content');toast('Fixed: '+issueType.replace(/_/g,' '),'success');
+    agentLog('seoGuardian','fix',{item:item.title,type:issueType},1);
+    if(S.page==='agents')go('agents');
+  }catch(e){toast('Fix failed: '+e.message,'error');}
+}
+window.seoGuardianFix=seoGuardianFix;
+
+/* ── Agent 4: Publishing Pipeline (heuristic) ── */
+function agentPublishingPipeline(){
+  agentStart('publishingPipeline');
+  var now=Date.now();var actions=[];
+  S.pipeline.forEach(function(item){
+    var age=now-(item.updated||now);var days=Math.round(age/86400000);
+    if(item.stage==='idea'){
+      var linked=S.content.find(function(c){return c.title===item.title||c.keyword===item.keyword;});
+      if(linked&&(linked.wordCount||0)>500){item.stage='writing';item.updated=now;actions.push({type:'advanced',title:item.title,from:'idea',to:'writing'});dispatchAutomation('pipeline.stage_changed',item);}
+    }
+    if(item.stage==='writing'){
+      var linked2=S.content.find(function(c){return c.title===item.title;});
+      if(linked2&&(linked2.aiScore||0)>70&&(linked2.seoScore||0)>60){item.stage='review';item.updated=now;actions.push({type:'advanced',title:item.title,from:'writing',to:'review'});dispatchAutomation('pipeline.stage_changed',item);}
+    }
+    if(days>7)actions.push({type:'stuck',title:item.title,stage:item.stage,days:days});
+  });
+  if(actions.filter(function(a){return a.type==='advanced';}).length>0)save('pipeline');
+  S._agents.reports.publishingPipeline={ts:now,actions:actions};
+  agentLog('publishingPipeline','check',{actions:actions.length},0);
+  agentStop('publishingPipeline');
+}
+AGENT_FNS.publishingPipeline=agentPublishingPipeline;
+
+/* ── Agent 6: Health Monitor (heuristic) ── */
+function agentHealthMonitor(){
+  agentStart('healthMonitor');
+  var published=S.content.filter(function(c){return c.status==='published';});
+  var now=Date.now();var checks=[];
+  var stale=published.filter(function(c){return(now-(c.updated||0))>90*86400000;});
+  checks.push({name:'Content Freshness',score:Math.max(0,Math.round(100-(stale.length/Math.max(published.length,1))*100)),items:stale.length,color:stale.length>3?'re':stale.length>0?'am':'gr'});
+  var thin=published.filter(function(c){return(c.wordCount||0)<500;});
+  checks.push({name:'Content Depth',score:Math.max(0,Math.round(100-(thin.length/Math.max(published.length,1))*100)),items:thin.length,color:thin.length>2?'re':thin.length>0?'am':'gr'});
+  var noMeta=published.filter(function(c){return!(c.metaDescription||c.metaDesc);});
+  checks.push({name:'SEO Meta Coverage',score:Math.max(0,Math.round(100-(noMeta.length/Math.max(published.length,1))*100)),items:noMeta.length,color:noMeta.length>0?'am':'gr'});
+  var noKw=published.filter(function(c){return!c.keyword&&!c.targetKeyword;});
+  checks.push({name:'Keyword Targeting',score:Math.max(0,Math.round(100-(noKw.length/Math.max(published.length,1))*100)),items:noKw.length,color:noKw.length>2?'re':'gr'});
+  var lim=planLimits();var creditPct=Math.round((S.credits.aiCalls||0)/lim.aiCalls*100);
+  checks.push({name:'Credit Health',score:Math.max(0,100-creditPct),items:null,color:creditPct>90?'re':creditPct>70?'am':'gr'});
+  var overallScore=Math.round(checks.reduce(function(a,c){return a+c.score;},0)/checks.length);
+  S._agents.reports.healthMonitor={ts:now,overallScore:overallScore,checks:checks};
+  agentLog('healthMonitor','check',{score:overallScore},0);
+  agentStop('healthMonitor');
+}
+AGENT_FNS.healthMonitor=agentHealthMonitor;
+
+/* ── Agent 1: Content Autopilot (AI-powered) ── */
+async function agentContentAutopilot(topics,options){
+  if(!topics||!topics.length)return;
+  var opts=options||{};var wc=opts.wordCount||1200;var col=opts.collection||'Articles';
+  agentStart('contentAutopilot');
+  var progEl=document.getElementById('autopilot-progress');
+  for(var t=0;t<topics.length;t++){
+    if(S._agents.registry.contentAutopilot._cancel){S._agents.registry.contentAutopilot._cancel=false;break;}
+    var topic=topics[t].trim();if(!topic)continue;
+    if(progEl)progEl.innerHTML='<strong>'+topic+'</strong> — Step 1/4: Researching…';
+    try{
+      var research=await callAI('Research "'+topic+'". Return: target audience, 5 subtopics, 3 data points, search intent. Be specific.',{system:'Content research specialist for '+S.siteName+'.',maxTokens:500});
+      if(progEl)progEl.innerHTML='<strong>'+topic+'</strong> — Step 2/4: Outlining…';
+      var outline=await callAI('Create a detailed H2/H3 outline for "'+topic+'" based on this research:\n'+research+'\nInclude intro, 4-6 H2 sections, FAQ with 3 questions, conclusion.',{system:'Content strategist.',maxTokens:500});
+      if(progEl)progEl.innerHTML='<strong>'+topic+'</strong> — Step 3/4: Writing '+wc+' words…';
+      var article=await callAI('Write a '+wc+'-word article on "'+topic+'" following this outline:\n'+outline+'\n\nUse ## for H2 headings. Include specific data, examples, actionable tips. Write for Indian audience.',{system:'Expert content writer for '+S.siteName+'. Write engaging, data-rich content.',maxTokens:Math.min(4000,Math.round(wc*1.5))});
+      if(progEl)progEl.innerHTML='<strong>'+topic+'</strong> — Step 4/4: Scoring & saving…';
+      var meta=await callAI('For article "'+topic+'", return ONLY JSON: {"metaTitle":"under 60 chars","metaDescription":"under 155 chars","slug":"url-slug","keyword":"target keyword","tags":["tag1","tag2"]}',{system:'SEO specialist. Return valid JSON only.',maxTokens:200});
+      var parsed={};try{parsed=JSON.parse(meta.replace(/```json|```/g,'').trim());}catch(e2){}
+      var item={id:Date.now()+t,title:topic,content:article,collection:col,status:'draft',
+        metaTitle:parsed.metaTitle||'',metaDescription:parsed.metaDescription||'',slug:parsed.slug||topic.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,''),
+        keyword:parsed.keyword||'',tags:parsed.tags||[],author:'Content Autopilot',
+        wordCount:article.split(/\s+/).filter(Boolean).length,updated:Date.now()};
+      item.aiScore=heuristicAIScore(item);item.seoScore=heuristicSEOScore(item);
+      S.content.unshift(item);save('content');
+      dispatchAutomation('content.saved',item);trackEvent('agent_content_created',item.id);
+    }catch(e){if(progEl)progEl.innerHTML='Error on "'+topic+'": '+e.message;}
+  }
+  agentLog('contentAutopilot','generate',{count:topics.length},topics.length*4);
+  agentStop('contentAutopilot');
+  if(progEl)progEl.innerHTML='Done — '+topics.length+' article(s) created as drafts.';
+  toast(topics.length+' articles generated by Content Autopilot','success');
+}
+
+/* ── Agent 3: Keyword Opportunity (AI) ── */
+async function agentKeywordOpportunity(){
+  agentStart('keywordOpportunity');
+  var existingKw=S.keywords.map(function(k){return k.keyword||k.term||'';}).filter(Boolean).join(', ');
+  var titles=S.content.slice(0,15).map(function(c){return c.title;}).join(', ');
+  try{
+    var raw=await callAI('Existing keywords: ['+existingKw+']. Content topics: ['+titles+']. Site: '+S.siteName+'.\n\nSuggest 10 untapped keyword opportunities. Return ONLY JSON array: [{"keyword":"...","volume":number,"difficulty":1-100,"opportunity":1-100,"contentType":"article|guide|comparison|review"}]',{system:'SEO keyword strategist. Return valid JSON only.',maxTokens:800});
+    var suggestions=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    S._agents.reports.keywordOpportunity={ts:Date.now(),suggestions:suggestions};
+    agentLog('keywordOpportunity','analyze',{count:suggestions.length},1);
+    toast('Keyword Opportunity: '+suggestions.length+' suggestions found','success');
+  }catch(e){toast('Keyword analysis failed: '+e.message,'error');}
+  agentStop('keywordOpportunity');
+  if(S.page==='agents')go('agents');
+}
+
+function addSuggestedKeyword(kw,vol,diff){
+  S.keywords.push({id:Date.now(),keyword:kw,term:kw,volume:vol||0,difficulty:diff||0,status:'tracked',trend:'stable',pos:null,url:'',tags:[]});
+  save('keywords');toast('Added: '+kw,'success');
+}
+window.addSuggestedKeyword=addSuggestedKeyword;
+
+/* ── Agent 7: Content Refresh (AI) ── */
+async function agentContentRefresh(maxAge,limit){
+  agentStart('contentRefresh');
+  var cutoff=Date.now()-(maxAge||90)*86400000;
+  var stale=S.content.filter(function(c){return c.status==='published'&&(c.updated||0)<cutoff;}).sort(function(a,b){return(a.updated||0)-(b.updated||0);}).slice(0,limit||5);
+  if(!stale.length){toast('No stale content found','success');agentStop('contentRefresh');return;}
+  var suggestions=[];
+  for(var i=0;i<stale.length;i++){
+    var item=stale[i];var days=Math.round((Date.now()-(item.updated||0))/86400000);
+    try{
+      var raw=await callAI('Article "'+item.title+'" last updated '+days+' days ago. First 500 chars: "'+(item.content||'').slice(0,500)+'". Suggest 3 specific updates with current 2026 data. Return JSON: {"suggestions":[{"type":"data|angle|example","description":"...","priority":"high|medium|low"}]}',{system:'Content refresh specialist.',maxTokens:400});
+      var parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
+      suggestions.push({id:item.id,title:item.title,days:days,suggestions:parsed.suggestions||[]});
+    }catch(e){suggestions.push({id:item.id,title:item.title,days:days,suggestions:[{type:'error',description:e.message,priority:'low'}]});}
+  }
+  S._agents.reports.contentRefresh={ts:Date.now(),items:suggestions};
+  agentLog('contentRefresh','scan',{count:stale.length},stale.length);
+  agentStop('contentRefresh');
+  toast('Content Refresh: '+stale.length+' articles analyzed','success');
+  if(S.page==='agents')go('agents');
+}
+
+/* ── Agent 8: Interlink Builder (AI) ── */
+async function agentInterlinkBuilder(){
+  agentStart('interlinkBuilder');
+  var published=S.content.filter(function(c){return c.status==='published'&&c.slug;});
+  if(published.length<3){toast('Need at least 3 published articles with slugs','info');agentStop('interlinkBuilder');return;}
+  var lib=published.slice(0,25).map(function(a){return'- "'+a.title+'" (slug: '+a.slug+', keyword: '+(a.keyword||'none')+')';}).join('\n');
+  try{
+    var raw=await callAI('Given these published articles:\n'+lib+'\n\nSuggest 8 internal links. Return JSON array: [{"fromTitle":"...","toTitle":"...","anchor":"2-4 word anchor text","reason":"why this link helps"}]',{system:'SEO interlinking specialist. Return valid JSON only.',maxTokens:600});
+    var links=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    S._agents.reports.interlinkBuilder={ts:Date.now(),links:links};
+    agentLog('interlinkBuilder','analyze',{count:links.length},1);
+    toast('Interlink Builder: '+links.length+' link opportunities found','success');
+  }catch(e){toast('Interlink analysis failed: '+e.message,'error');}
+  agentStop('interlinkBuilder');
+  if(S.page==='agents')go('agents');
+}
+
+/* ── Agent 5: Smart Onboarding (AI) ── */
+async function agentSmartOnboarding(){
+  if(S._agents.onboarded)return;
+  agentStart('smartOnboarding');
+  var niche=prompt('What is your site/blog niche? (e.g. Finance, Tech, Health, Travel)');
+  if(!niche){agentStop('smartOnboarding');return;}
+  toast('Smart Onboarding: Generating seed content for '+niche+'…','info');
+  try{
+    var raw=await callAI('Generate 5 article ideas for a '+niche+' blog called "'+S.siteName+'". Return JSON array: [{"title":"...","keyword":"...","metaDescription":"under 155 chars","outline":"3 H2 headings"}]',{system:'Content strategist. Return valid JSON only.',maxTokens:600});
+    var articles=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    articles.forEach(function(a){
+      S.content.unshift({id:Date.now()+Math.random()*1000|0,title:a.title,keyword:a.keyword,metaDescription:a.metaDescription,content:'## '+a.outline.replace(/,\s*/g,'\n\n## '),collection:'Articles',status:'draft',wordCount:0,aiScore:0,seoScore:0,author:'Smart Onboarding',updated:Date.now(),tags:[niche.toLowerCase()]});
+      S.pipeline.unshift({id:Date.now()+Math.random()*1000|0,title:a.title,stage:'idea',keyword:a.keyword,priority:'medium',assignee:'',updated:Date.now()});
+    });
+    save('content');save('pipeline');
+    var kwRaw=await callAI('Suggest 8 keywords for a '+niche+' site. Return JSON array: [{"keyword":"...","volume":number,"difficulty":1-100}]',{system:'SEO keyword specialist. Return valid JSON only.',maxTokens:300});
+    var kws=JSON.parse(kwRaw.replace(/```json|```/g,'').trim());
+    kws.forEach(function(k){S.keywords.push({id:Date.now()+Math.random()*1000|0,keyword:k.keyword,term:k.keyword,volume:k.volume||0,difficulty:k.difficulty||0,status:'tracked',trend:'stable'});});
+    save('keywords');
+    S._agents.onboarded=true;S._agents.registry.smartOnboarding.enabled=false;save('_agents');
+    agentLog('smartOnboarding','seed',{articles:articles.length,keywords:kws.length},2);
+    toast('Workspace seeded: '+articles.length+' articles + '+kws.length+' keywords','success');
+    buildNav();go('dashboard');
+  }catch(e){toast('Onboarding failed: '+e.message,'error');}
+  agentStop('smartOnboarding');
+}
+
+/* ── Agent Init ── */
+function initAgents(){
+  var reg=S._agents.registry;
+  Object.keys(reg).forEach(function(id){
+    if(reg[id].enabled&&reg[id].interval&&AGENT_FNS[id]){
+      _agentTimers[id]=setInterval(AGENT_FNS[id],reg[id].interval);
+    }
+  });
+  if(!S._agents.onboarded&&S.content.length<=3&&S.keywords.length<=5&&_sb){
+    setTimeout(function(){agentSmartOnboarding();},2000);
+  }
+  updateAgentWidget();
+}
+
+/* ── Agent Manager Page ── */
+function pgAgents(){
+  var reg=S._agents.registry;
+  var AGENT_INFO=[
+    {id:'contentAutopilot',name:'Content Autopilot',ico:'✍️',desc:'Multi-step AI article generation',periodic:false,credits:'~5/article'},
+    {id:'seoGuardian',name:'SEO Guardian',ico:'🛡️',desc:'Scans published content for SEO issues',periodic:true,credits:'0 (scan) / 1 (fix)'},
+    {id:'keywordOpportunity',name:'Keyword Opportunity',ico:'🔑',desc:'Finds untapped keyword gaps',periodic:false,credits:'1/run'},
+    {id:'publishingPipeline',name:'Pipeline Manager',ico:'🗃️',desc:'Auto-advances pipeline items',periodic:true,credits:'0'},
+    {id:'smartOnboarding',name:'Smart Onboarding',ico:'🚀',desc:'Seeds empty workspace with content',periodic:false,credits:'~3'},
+    {id:'healthMonitor',name:'Health Monitor',ico:'💚',desc:'Workspace health score & checks',periodic:true,credits:'0'},
+    {id:'contentRefresh',name:'Content Refresh',ico:'🔄',desc:'Finds & updates stale articles',periodic:false,credits:'1/article'},
+    {id:'interlinkBuilder',name:'Interlink Builder',ico:'🔗',desc:'Suggests internal link opportunities',periodic:false,credits:'1/run'},
+  ];
+  var cards=AGENT_INFO.map(function(a){
+    var r=reg[a.id]||{};var report=S._agents.reports[a.id];
+    var statusBadge=r.enabled?'<span class="badge b-gr">Active</span>':'<span class="badge b-dim">Off</span>';
+    var lastRun=r.lastRun?new Date(r.lastRun).toLocaleString():'Never';
+    var reportSummary='';
+    if(a.id==='seoGuardian'&&report)reportSummary=report.issues.length+' issues in '+report.scanned+' articles';
+    if(a.id==='healthMonitor'&&report)reportSummary='Score: '+report.overallScore+'/100';
+    if(a.id==='publishingPipeline'&&report)reportSummary=report.actions.length+' actions';
+    if(a.id==='keywordOpportunity'&&report)reportSummary=(report.suggestions||[]).length+' suggestions';
+    if(a.id==='contentRefresh'&&report)reportSummary=(report.items||[]).length+' articles analyzed';
+    if(a.id==='interlinkBuilder'&&report)reportSummary=(report.links||[]).length+' links suggested';
+    return'<div class="metric" style="padding:16px"><div class="metric-top"><div class="metric-icon" style="font-size:18px">'+a.ico+'</div>'+statusBadge+'</div><div style="font-size:14px;font-weight:700;color:var(--t1);margin:8px 0">'+a.name+'</div><div style="font-size:11px;color:var(--t3);margin-bottom:4px">'+a.desc+'</div><div style="font-size:10px;color:var(--t2);margin-bottom:8px">Credits: '+a.credits+' · Last: '+lastRun+'</div>'+(reportSummary?'<div style="font-size:11px;color:var(--vi);margin-bottom:8px">'+reportSummary+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center"><div class="tog'+(r.enabled?' on':'')+'" onclick="agentSetEnabled(\''+a.id+'\','+(!r.enabled)+')"><div class="togthumb"></div></div>'+(a.id==='contentAutopilot'?'<button class="btn btn-primary btn-xs" onclick="openAutopilotModal()">Run</button>':'<button class="btn btn-ghost btn-xs" onclick="runAgentNow(\''+a.id+'\')">Run Now</button>')+'</div></div>';
+  }).join('');
+
+  // Reports section
+  var reportHtml='';
+  var seoReport=S._agents.reports.seoGuardian;
+  if(seoReport&&seoReport.issues.length){
+    reportHtml+='<div class="panel" style="margin-bottom:14px"><div class="panel-hd"><div class="panel-title">🛡️ SEO Guardian Report</div><span class="badge b-am">'+seoReport.issues.length+' issues</span></div><div style="padding:12px"><table style="width:100%;font-size:12px"><tr style="color:var(--t3)"><td>Article</td><td>Issue</td><td>Detail</td><td></td></tr>'+seoReport.issues.slice(0,10).map(function(i){return'<tr><td style="color:var(--t1)">'+i.title.slice(0,30)+'</td><td style="color:var(--am)">'+i.type.replace(/_/g,' ')+'</td><td style="color:var(--t3)">'+i.detail+'</td><td><button class="btn btn-ghost btn-xs" onclick="seoGuardianFix('+JSON.stringify(i.id)+',\''+i.type+'\')">Fix ✦</button></td></tr>';}).join('')+'</table></div></div>';
+  }
+  var kwReport=S._agents.reports.keywordOpportunity;
+  if(kwReport&&kwReport.suggestions){
+    reportHtml+='<div class="panel" style="margin-bottom:14px"><div class="panel-hd"><div class="panel-title">🔑 Keyword Opportunities</div></div><div style="padding:12px"><table style="width:100%;font-size:12px"><tr style="color:var(--t3)"><td>Keyword</td><td>Volume</td><td>Difficulty</td><td>Opportunity</td><td></td></tr>'+kwReport.suggestions.map(function(s){return'<tr><td style="color:var(--t1)">'+s.keyword+'</td><td>'+s.volume+'</td><td>'+s.difficulty+'</td><td style="color:var(--gr)">'+s.opportunity+'</td><td><button class="btn btn-ghost btn-xs" onclick="addSuggestedKeyword(\''+s.keyword.replace(/'/g,"\\'")+'\','+s.volume+','+s.difficulty+')">+ Track</button></td></tr>';}).join('')+'</table></div></div>';
+  }
+  var healthReport=S._agents.reports.healthMonitor;
+  if(healthReport){
+    reportHtml+='<div class="panel" style="margin-bottom:14px"><div class="panel-hd"><div class="panel-title">💚 Workspace Health</div><span class="badge '+(healthReport.overallScore>70?'b-gr':healthReport.overallScore>40?'b-am':'b-re')+'">'+healthReport.overallScore+'/100</span></div><div style="padding:12px">'+healthReport.checks.map(function(c){return'<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><div style="width:8px;height:8px;border-radius:50%;background:var(--'+c.color+')"></div><div style="flex:1;font-size:12px;color:var(--t1)">'+c.name+'</div><div style="font-size:12px;color:var(--t2)">'+c.score+'/100'+(c.items!==null?' · '+c.items+' issues':'')+'</div></div>';}).join('')+'</div></div>';
+  }
+  var interlinkReport=S._agents.reports.interlinkBuilder;
+  if(interlinkReport&&interlinkReport.links){
+    reportHtml+='<div class="panel" style="margin-bottom:14px"><div class="panel-hd"><div class="panel-title">🔗 Interlink Suggestions</div></div><div style="padding:12px">'+interlinkReport.links.map(function(l){return'<div style="padding:6px 0;border-bottom:1px solid var(--br);font-size:12px"><span style="color:var(--t1)">'+l.fromTitle+'</span> <span style="color:var(--t3)">→</span> <span style="color:var(--vi)">'+l.toTitle+'</span><br><span style="color:var(--t3)">Anchor: "'+l.anchor+'" · '+l.reason+'</span></div>';}).join('')+'</div></div>';
+  }
+
+  // History
+  var historyRows=S._agents.history.slice(0,30).map(function(h){
+    return'<tr><td style="color:var(--t3);font-size:10px">'+new Date(h.ts).toLocaleString()+'</td><td style="color:var(--t1)">'+h.agentId+'</td><td>'+h.action+'</td><td style="color:var(--t3)">'+JSON.stringify(h.result).slice(0,50)+'</td><td>'+(h.creditsUsed||0)+'</td></tr>';
+  }).join('');
+
+  return'<div style="margin-bottom:20px"><div class="page-eyebrow">Autonomous Intelligence</div><h1 class="page-title">AI Agents</h1><p class="page-sub">Agents work in the background to create content, monitor SEO, manage your pipeline, and keep your workspace healthy.</p></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" class="stagger">'+cards+'</div>'+reportHtml+'<div class="panel"><div class="panel-hd"><div class="panel-title">Agent History</div></div><div class="tbl-wrap"><table style="width:100%;font-size:12px"><tr style="color:var(--t3)"><td>Time</td><td>Agent</td><td>Action</td><td>Result</td><td>Credits</td></tr>'+historyRows+'</table></div></div>';
+}
+
+function openAutopilotModal(){
+  modal('<div class="modal-head"><div><div class="modal-title">Content Autopilot ✦</div><div style="font-size:11px;color:var(--t3)">Multi-step AI article generation</div></div><button class="close-btn" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="field-group" style="margin-bottom:10px"><label class="field-label">Topics (one per line)</label><textarea class="field-input" id="autopilot-topics" rows="5" placeholder="Best credit cards 2026\nMutual fund SIP guide\nFD vs RD comparison"></textarea></div><div class="field-group" style="margin-bottom:10px"><label class="field-label">Collection</label><select class="field-select" id="autopilot-col">'+S.collections.map(function(c){return'<option>'+c.name+'</option>';}).join('')+'</select></div><div id="autopilot-progress" class="ai-output-area empty" style="min-height:40px">Enter topics and click Generate.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="S._agents.registry.contentAutopilot._cancel=true;closeModal()">Cancel</button><button class="btn btn-primary" onclick="var t=document.getElementById(\'autopilot-topics\').value.split(\'\\n\').filter(Boolean);var c=document.getElementById(\'autopilot-col\').value;agentContentAutopilot(t,{collection:c})">Generate Articles ✦</button></div>',600);
+}
+window.openAutopilotModal=openAutopilotModal;
+
+function runAgentNow(id){
+  if(id==='seoGuardian')agentSEOGuardian();
+  else if(id==='publishingPipeline')agentPublishingPipeline();
+  else if(id==='healthMonitor')agentHealthMonitor();
+  else if(id==='keywordOpportunity')agentKeywordOpportunity();
+  else if(id==='contentRefresh')agentContentRefresh();
+  else if(id==='interlinkBuilder')agentInterlinkBuilder();
+  else if(id==='smartOnboarding')agentSmartOnboarding();
+  else toast('Run from dedicated button','info');
+}
+window.runAgentNow=runAgentNow;
+
 /* ════════════════════════════════════════════
    DEMO MODE — show example outputs without API key
 ════════════════════════════════════════════ */
@@ -8030,6 +8372,7 @@ async function initConduit(){
   buildNav();
   updateCreditMeter();
   trackEvent('session_start');
+  initAgents();
 
   if(!_sb){
     // No Supabase configured — run in localStorage-only mode

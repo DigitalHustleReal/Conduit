@@ -22,6 +22,23 @@
   --r6:6px;--r8:8px;--r10:10px;--r12:12px;--r16:16px;
   --sb:240px;--topH:52px;
 }
+html.theme-light{
+  --c0:#F5F7FA;--c1:#FFFFFF;--c2:#EFF1F5;--c3:#E4E7ED;--c4:#D8DCE5;
+  --br:#D0D5DD;--br2:#C4CAD4;--br3:#B8BFCC;
+  --t1:#111827;--t2:#4B5563;--t3:#9CA3AF;--t4:#D1D5DB;
+  --vi:#6C63FF;--vi2:#5A52DD;--vix:rgba(108,99,255,.1);--vib:rgba(108,99,255,.04);
+  --gr:#059669;--grx:rgba(5,150,105,.08);--grd:rgba(5,150,105,.04);
+  --am:#D97706;--amx:rgba(217,119,6,.08);
+  --re:#DC2626;--rex:rgba(220,38,38,.08);
+  --cy:#0891B2;--cyx:rgba(8,145,178,.08);
+  --pk:#DB2777;--pkx:rgba(219,39,119,.08);
+}
+html.theme-light .sb-logo-wrap{box-shadow:0 2px 8px rgba(108,99,255,.2)}
+html.theme-light .panel{box-shadow:0 1px 3px rgba(0,0,0,.06)}
+html.theme-light input,html.theme-light textarea,html.theme-light select{background:var(--c1);border-color:var(--br);color:var(--t1)}
+html.theme-light .cm-bar{background:var(--c3)}
+.theme-toggle{display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--c2);border:1px solid var(--br);border-radius:var(--r8);cursor:pointer;font-size:13px;transition:all .14s;color:var(--t2);user-select:none}
+.theme-toggle:hover{border-color:var(--vi);color:var(--t1)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:var(--c0);color:var(--t1);font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;-webkit-font-smoothing:antialiased;overflow:hidden}
 
@@ -635,6 +652,7 @@ kbd{font-family:'Fira Code',monospace;font-size:10px;background:var(--c3);paddin
       <div id="agent-widget" onclick="go('agents')" title="AI Agents" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--c2);border:1px solid var(--br);border-radius:var(--r8);cursor:pointer;font-size:11px;color:var(--t2)"><span>🤖</span><span id="agent-widget-label">0 agents</span></div>
       <button class="btn btn-secondary btn-sm" onclick="go('media')">📎 Media</button>
       <button class="btn btn-primary btn-sm" onclick="openNewContent()">+ New Content</button>
+      <div class="theme-toggle" onclick="toggleTheme()" id="theme-toggle" title="Toggle light/dark theme"><span id="theme-icon">☀️</span></div>
       <button onclick="signOutConduit()" class="btn btn-ghost btn-sm" id="signout-btn" style="font-size:11.5px;display:none">Sign out</button>
     </div>
   </div>
@@ -659,6 +677,22 @@ const DB={
   get(k,d){try{const v=localStorage.getItem('prism3_'+k);return v!=null?JSON.parse(v):d}catch{return d}},
   set(k,v){try{localStorage.setItem('prism3_'+k,JSON.stringify(v))}catch{}}
 };
+
+/* ═══════════ THEME TOGGLE ═══════════ */
+function toggleTheme(){
+  var isLight = document.documentElement.classList.toggle('theme-light');
+  DB.set('theme', isLight ? 'light' : 'dark');
+  var ico = document.getElementById('theme-icon');
+  if(ico) ico.textContent = isLight ? '🌙' : '☀️';
+}
+window.toggleTheme = toggleTheme;
+function applyTheme(){
+  var saved = DB.get('theme','dark');
+  if(saved === 'light') document.documentElement.classList.add('theme-light');
+  var ico = document.getElementById('theme-icon');
+  if(ico) ico.textContent = saved === 'light' ? '🌙' : '☀️';
+}
+applyTheme();
 
 const S={
   page:'dashboard',

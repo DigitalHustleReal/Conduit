@@ -94,7 +94,6 @@ module.exports = async function handler(req, res) {
               plan,
               stripe_customer_id: session.customer,
               stripe_subscription_id: session.subscription,
-              credits_ai_calls: 0,
               credits_ai_limit: credits,
             })
             .eq('id', workspaceId);

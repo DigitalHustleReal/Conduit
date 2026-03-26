@@ -67,8 +67,8 @@ module.exports = async function handler(req, res) {
         plan: plan || 'pro',
         user_id: user.id,
       },
-      success_url: req.headers.origin + '/app.html?upgraded=' + (plan || 'pro'),
-      cancel_url: req.headers.origin + '/app.html#settings',
+      success_url: (process.env.SITE_URL || 'https://conduit-woad.vercel.app') + '/app.html?upgraded=' + (plan || 'pro'),
+      cancel_url: (process.env.SITE_URL || 'https://conduit-woad.vercel.app') + '/app.html#settings',
     });
 
     return res.status(200).json({ url: session.url, sessionId: session.id });

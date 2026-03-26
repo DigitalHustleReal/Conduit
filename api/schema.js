@@ -20,7 +20,8 @@ module.exports = async function handler(req, res) {
 
   try {
     const { slug, type, workspace, domain } = req.query;
-    const siteDomain = domain || process.env.SITE_DOMAIN || 'getconduit.io';
+    const rawDomain = domain || process.env.SITE_DOMAIN || 'getconduit.io';
+    const siteDomain = rawDomain.replace(/[^a-zA-Z0-9.-]/g, '').slice(0, 100);
     const siteName = process.env.SITE_NAME || 'Conduit';
 
     // Website schema

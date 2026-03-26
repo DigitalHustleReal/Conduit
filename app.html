@@ -1179,85 +1179,189 @@ function fleschKincaid(text){
   return{grade:grade,ease:ease,level:level,sentences:sc,words:wc,syllables:sy,avgWordsPerSentence:Math.round(wc/sc*10)/10,avgSyllablesPerWord:Math.round(sy/wc*100)/100};
 }
 
+/* ═══════════ DYNAMIC CONTENT ANALYSIS ═══════════ */
+function analyzeContent(content){
+  // Extract all signals from content in one pass
+  var c=content||'';
+  var words=c.split(/\s+/).filter(Boolean);
+  var wc=words.length;
+  var sentences=c.split(/[.!?]+/).filter(function(s){return s.trim().length>5;});
+  var paragraphs=c.split(/\n\n+/).filter(function(p){return p.trim().length>20;});
+  var h2s=(c.match(/^##\s|<h2/gim)||[]);
+  var h3s=(c.match(/^###\s|<h3/gim)||[]);
+  var images=(c.match(/<img\s|!\[/g)||[]);
+  var imgsWithAlt=(c.match(/alt=["'][^"']+["']/g)||[]);
+  var internalLinks=(c.match(/\[.*?\]\((?!http).*?\)/g)||[]);
+  var externalLinks=(c.match(/\[.*?\]\(https?:\/\/.*?\)/g)||[]).concat(c.match(/<a\s+href=["']https?:\/\//gi)||[]);
+  var allLinks=internalLinks.length+externalLinks.length+(c.match(/<a\s/gi)||[]).length;
+  var lists=(c.match(/^[-*]\s/gm)||[]).concat(c.match(/<[uo]l/gi)||[]);
+  var tables=(c.match(/\|.*\|.*\|/g)||[]).concat(c.match(/<table/gi)||[]);
+  var faqs=(c.match(/^###?\s.*\?/gm)||[]);
+  var codeBlocks=(c.match(/```/g)||[]);
+  var boldText=(c.match(/\*\*[^*]+\*\*/g)||[]).concat(c.match(/<strong/gi)||[]);
+  var starters=sentences.map(function(s){return s.trim().split(/\s+/)[0]?.toLowerCase();}).filter(Boolean);
+  var uniqueStarters=starters.filter(function(v,i,a){return a.indexOf(v)===i;});
+  var fk=fleschKincaid(c);
+  return{
+    wordCount:wc,sentences:sentences.length,paragraphs:paragraphs.length,
+    h2Count:h2s.length,h3Count:h3s.length,headingDepth:h2s.length+h3s.length,
+    imageCount:images.length,imagesWithAlt:imgsWithAlt.length,
+    internalLinks:internalLinks.length,externalLinks:externalLinks.length,totalLinks:allLinks,
+    listCount:lists.length,tableCount:tables.length,faqCount:faqs.length,
+    codeBlocks:Math.floor(codeBlocks.length/2),boldCount:boldText.length,
+    sentenceVariety:starters.length>3?Math.round(uniqueStarters.length/starters.length*100):0,
+    avgWordsPerSentence:sentences.length?Math.round(wc/sentences.length):0,
+    avgWordsPerParagraph:paragraphs.length?Math.round(wc/paragraphs.length):0,
+    readability:fk
+  };
+}
+
+function workspaceBenchmarks(){
+  // Dynamic benchmarks from workspace's own published content
+  var pub=S.content.filter(function(c){return c.status==='published'&&(c.wordCount||0)>100;});
+  if(pub.length<3)return{avgWC:1000,avgH2:3,avgImages:1,avgLinks:2,avgSEO:60,avgAI:60,p75WC:1500,p75SEO:75};
+  var wcs=pub.map(function(c){return c.wordCount||0;}).sort(function(a,b){return a-b;});
+  var seos=pub.map(function(c){return c.seoScore||0;}).sort(function(a,b){return a-b;});
+  var ais=pub.map(function(c){return c.aiScore||0;}).sort(function(a,b){return a-b;});
+  var p75=function(arr){return arr[Math.floor(arr.length*0.75)]||arr[arr.length-1];};
+  var avg=function(arr){return arr.length?Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length):0;};
+  var contents=pub.map(function(c){return c.content||c.body||'';});
+  var avgH2=avg(contents.map(function(c){return(c.match(/^##\s|<h2/gim)||[]).length;}));
+  var avgImgs=avg(contents.map(function(c){return(c.match(/<img|!\[/g)||[]).length;}));
+  var avgLinks=avg(contents.map(function(c){return(c.match(/\[.*?\]\(.*?\)/g)||[]).length;}));
+  return{avgWC:avg(wcs),avgH2:avgH2,avgImages:avgImgs,avgLinks:avgLinks,avgSEO:avg(seos),avgAI:avg(ais),p75WC:p75(wcs),p75SEO:p75(seos)};
+}
+
 function heuristicAIScore(item){
-  // Rebalanced: structure/quality weighted equally with length
-  var s=15;
   var content=item.content||item.body||'';
-  var wc=item.wordCount||content.split(/\s+/).filter(Boolean).length;
-  // Length (max 15 pts — reduced from 29)
-  if(wc>300)s+=4;if(wc>600)s+=4;if(wc>1000)s+=4;if(wc>1500)s+=3;
-  // Structure (max 18 pts — increased)
-  var h2Count=(content.match(/^##\s|<h2/gim)||[]).length;
-  if(h2Count>=1)s+=5;if(h2Count>=3)s+=5;if(h2Count>=5)s+=3;
-  // Lists/tables (structured content — NEW)
-  if(content.match(/^[-*]\s/gm)||content.match(/<[uo]l/i))s+=4;
-  if(content.match(/\|.*\|.*\|/)||content.match(/<table/i))s+=3;
-  // FAQ detection (NEW)
-  if(content.match(/^###?\s.*\?/gm))s+=4;
-  // Metadata (max 14 pts)
-  if(item.tags?.length>0)s+=3;if(item.tags?.length>3)s+=2;
-  if((item.metaDescription||item.metaDesc||'').length>50)s+=5;
-  if((item.metaTitle||item.seoTitle||'').length>10)s+=4;
-  // Keyword relevance (max 10 pts)
-  if(item.keyword)s+=5;
-  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=5;
-  // Readability (max 12 pts — increased from 11)
-  var fk=fleschKincaid(content);
-  if(fk.ease>=60)s+=5;if(fk.ease>=70)s+=4;
-  if(fk.avgWordsPerSentence<=20)s+=3;
-  // Variety: unique sentence starters (NEW — catches AI repetition)
-  var sentences=content.split(/[.!?]+/).filter(function(s){return s.trim().length>10;});
-  if(sentences.length>=5){
-    var starters=sentences.map(function(s){return s.trim().split(/\s+/)[0]?.toLowerCase();});
-    var unique=starters.filter(function(v,i,a){return a.indexOf(v)===i;});
-    if(unique.length/starters.length>0.6)s+=4;// 60%+ unique starters
-  }
-  // Links (max 5 pts)
-  var linkCount=(content.match(/\[.*?\]\(.*?\)/g)||[]).length+(content.match(/<a\s/gi)||[]).length;
-  if(linkCount>=2)s+=3;if(linkCount>=5)s+=2;
-  item._readability=fk;
+  var a=analyzeContent(content);
+  var bench=workspaceBenchmarks();
+  var s=10;// Base
+
+  // === CONTENT DEPTH (max 18) — dynamic against workspace average ===
+  if(a.wordCount>=bench.avgWC*0.5)s+=4;// At least half of workspace avg
+  if(a.wordCount>=bench.avgWC)s+=5;// Meets workspace average
+  if(a.wordCount>=bench.p75WC)s+=5;// Top quartile
+  if(a.wordCount>=bench.p75WC*1.5)s+=4;// Exceptional depth
+
+  // === STRUCTURE (max 20) — heading hierarchy, lists, tables, FAQ ===
+  if(a.h2Count>=1)s+=4;if(a.h2Count>=3)s+=3;if(a.h2Count>=5)s+=2;
+  if(a.h3Count>=1)s+=2;// Sub-headings show depth
+  if(a.listCount>=1)s+=3;// Lists = scannable
+  if(a.tableCount>=1)s+=3;// Tables = structured data
+  if(a.faqCount>=1)s+=3;// FAQ sections boost SERP features
+
+  // === MEDIA (max 10) — images with alt text ===
+  if(a.imageCount>=1)s+=3;if(a.imageCount>=3)s+=3;
+  if(a.imagesWithAlt>=1)s+=2;
+  if(a.imageCount>0&&a.imagesWithAlt===a.imageCount)s+=2;// All images have alt
+
+  // === READABILITY (max 14) ===
+  if(a.readability.ease>=50)s+=3;if(a.readability.ease>=60)s+=3;if(a.readability.ease>=70)s+=3;
+  if(a.avgWordsPerSentence<=20)s+=3;
+  if(a.avgWordsPerParagraph<=200)s+=2;// Short paragraphs
+
+  // === WRITING QUALITY (max 10) ===
+  if(a.sentenceVariety>=60)s+=4;// 60%+ unique sentence starters (anti-AI-slop)
+  if(a.sentenceVariety>=80)s+=2;// Excellent variety
+  if(a.boldCount>=2)s+=2;// Emphasis used
+  if(a.codeBlocks>=1)s+=2;// Code = technical depth
+
+  // === METADATA (max 10) ===
+  if(item.tags?.length>0)s+=2;if(item.tags?.length>=3)s+=2;
+  if((item.metaDescription||item.metaDesc||'').length>50)s+=3;
+  if((item.metaTitle||item.seoTitle||'').length>10)s+=3;
+
+  // === KEYWORD (max 8) ===
+  if(item.keyword)s+=4;
+  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=4;
+
+  // === LINKS (max 8) ===
+  if(a.internalLinks>=1)s+=2;if(a.internalLinks>=3)s+=2;
+  if(a.externalLinks>=1)s+=2;// Cites external sources
+  if(a.totalLinks>=bench.avgLinks)s+=2;// Meets workspace link average
+
+  // Store analysis for display
+  item._readability=a.readability;
+  item._analysis=a;
   return Math.min(98,Math.max(0,s));
 }
+
 function heuristicSEOScore(item){
-  // Rebalanced: meta/keyword/structure weighted more, word count reduced
-  var s=5;
+  var content=item.content||item.body||'';
+  var a=item._analysis||analyzeContent(content);
+  var bench=workspaceBenchmarks();
+  var s=5;// Base
+
+  // === META TAGS (max 16) — Google's actual limits ===
   var mt=(item.metaTitle||item.seoTitle||'');
   var md=(item.metaDescription||item.metaDesc||'');
-  var content=item.content||item.body||'';
-  // Meta title (max 14 pts — widened range to 10-70 chars)
-  if(mt.length>=10&&mt.length<=70)s+=14;else if(mt.length>0)s+=5;
-  // Meta description (max 14 pts — widened to 50-160)
-  if(md.length>=50&&md.length<=160)s+=14;else if(md.length>0)s+=5;
-  // Target keyword (max 12 pts)
-  if(item.keyword)s+=7;
-  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=5;
-  // Keyword in first 100 words (5 pts)
-  if(item.keyword){var first100=content.split(/\s+/).slice(0,100).join(' ').toLowerCase();if(first100.includes(item.keyword.toLowerCase()))s+=5;}
-  // Keyword density check (NEW — 3 pts)
-  if(item.keyword&&content.length>200){
-    var kwLower=item.keyword.toLowerCase();var bodyLower=content.toLowerCase();
-    var kwCount=(bodyLower.split(kwLower).length-1);var totalWords=content.split(/\s+/).length;
-    var density=kwCount/totalWords*100;
-    if(density>=0.5&&density<=2.5)s+=3;// Healthy density
+  // Google shows ~600px ≈ 50-70 chars for title
+  if(mt.length>=30&&mt.length<=70)s+=8;else if(mt.length>=10)s+=3;
+  // Google shows ~920px ≈ 120-160 chars for description
+  if(md.length>=80&&md.length<=160)s+=8;else if(md.length>=50)s+=3;
+
+  // === KEYWORD OPTIMIZATION (max 18) ===
+  if(item.keyword){
+    s+=4;// Has target keyword
+    var kwLower=item.keyword.toLowerCase();
+    if(item.title?.toLowerCase().includes(kwLower))s+=4;// In title
+    // In first 100 words
+    var first100=content.split(/\s+/).slice(0,100).join(' ').toLowerCase();
+    if(first100.includes(kwLower))s+=3;
+    // In H2s
+    var h2Text=(content.match(/^##\s.+/gm)||[]).join(' ').toLowerCase();
+    if(h2Text.includes(kwLower))s+=3;
+    // Keyword density (0.5-2.5% = healthy)
+    if(content.length>200){
+      var kwCount=(content.toLowerCase().split(kwLower).length-1);
+      var density=kwCount/a.wordCount*100;
+      if(density>=0.5&&density<=2.5)s+=4;
+      else if(density>2.5)s-=2;// Penalty for keyword stuffing
+    }
   }
-  // Slug (5 pts)
-  if(item.slug)s+=5;
-  // Heading structure (max 8 pts)
-  var h2Count=(content.match(/^##\s|<h2/gim)||[]).length;
-  if(h2Count>=1)s+=5;if(h2Count>=3)s+=3;
-  // Word count (max 8 pts — reduced from 14)
-  var wc=item.wordCount||content.split(/\s+/).filter(Boolean).length;
-  if(wc>500)s+=3;if(wc>1000)s+=3;if(wc>1500)s+=2;
-  // Internal links (max 6 pts)
-  var linkCount=(content.match(/\[.*?\]\(.*?\)/g)||[]).length;
-  if(linkCount>=1)s+=3;if(linkCount>=3)s+=3;
-  // Images (max 5 pts — increased)
-  var imgCount=(content.match(/<img|!\[/g)||[]).length;
-  if(imgCount>=1)s+=3;
-  if((content.match(/alt=["'][^"']+["']/g)||[]).length>0)s+=2;
-  // Readability (max 4 pts)
-  var fk=fleschKincaid(content);
-  if(fk.ease>=50)s+=2;if(fk.ease>=60)s+=2;
+
+  // === CONTENT STRUCTURE (max 14) ===
+  if(a.h2Count>=1)s+=3;if(a.h2Count>=3)s+=3;
+  if(a.h3Count>=1)s+=2;
+  if(item.slug)s+=3;
+  if(item.slug&&item.keyword&&item.slug.includes(item.keyword.toLowerCase().replace(/\s+/g,'-')))s+=3;// Keyword in slug
+
+  // === CONTENT LENGTH — dynamic (max 10) ===
+  if(a.wordCount>=300)s+=2;
+  if(a.wordCount>=bench.avgWC*0.8)s+=3;// Close to workspace avg
+  if(a.wordCount>=bench.avgWC)s+=3;// Meets avg
+  if(a.wordCount>=bench.p75WC)s+=2;// Top quartile
+
+  // === MEDIA & RICH CONTENT (max 10) ===
+  if(a.imageCount>=1)s+=3;if(a.imageCount>=3)s+=2;// Google Image Search
+  if(a.imagesWithAlt>=1)s+=2;// Alt text = accessibility + SEO
+  if(a.tableCount>=1)s+=2;// Tables can become featured snippets
+  if(a.faqCount>=1)s+=1;// FAQ schema potential
+
+  // === INTERNAL LINKING (max 8) ===
+  if(a.internalLinks>=1)s+=3;if(a.internalLinks>=3)s+=3;
+  if(a.externalLinks>=1)s+=2;// Outbound links show authority
+
+  // === READABILITY (max 6) ===
+  var fk=a.readability||fleschKincaid(content);
+  if(fk.ease>=40)s+=2;if(fk.ease>=55)s+=2;if(fk.ease>=70)s+=2;
+
+  // === FRESHNESS (max 4) — newer content ranks better ===
+  var ageInDays=item.updated?Math.round((Date.now()-item.updated)/86400000):365;
+  if(ageInDays<=30)s+=4;else if(ageInDays<=90)s+=2;else if(ageInDays<=180)s+=1;
+  // Penalty for very old content
+  if(ageInDays>365)s-=2;
+
+  // === UNIQUENESS within workspace (max 4) ===
+  if(item.title){
+    var dupes=S.content.filter(function(c){return c.id!==item.id&&c.title===item.title;});
+    if(dupes.length===0)s+=4;// Unique title
+    else s-=3;// Duplicate title = cannibalization penalty
+  }
+
+  item._readability=fk;
+  item._analysis=a;
   return Math.min(98,Math.max(0,s));
 }
 

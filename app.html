@@ -722,6 +722,8 @@ const S={
   // V7+ additions
   contentHistory: DB.get('contentHistory', {}),  // {itemId: [{ts, wordCount, snapshot}]}
   demoCallsUsed:  DB.get('demoCallsUsed', 0),     // free demo calls without API key
+  _agentFeedback: DB.get('_agentFeedback', []),   // [{agent_id, action, content_id, suggestion, ts}]
+  _agentMemory: DB.get('_agentMemory', {}),       // {agentId: {key: {value, ts}}}
 
 
   pricingPlan:DB.get('pricingPlan','free'),
@@ -7743,6 +7745,93 @@ function agentSetEnabled(id,enabled){
   save('_agents');updateAgentWidget();
   if(S.page==='agents')go('agents');
 }
+
+/* ═══════════ AGENT FEEDBACK + MEMORY + CONTEXT (Flywheel) ═══════════ */
+function agentFeedback(agentId, action, contentId, suggestion){
+  var entry={agent_id:agentId, action:action, content_id:contentId||null, suggestion:(suggestion||'').slice(0,300), ts:Date.now()};
+  S._agentFeedback.unshift(entry);
+  if(S._agentFeedback.length>200)S._agentFeedback=S._agentFeedback.slice(0,200);
+  save('_agentFeedback');
+  if(_sb&&S.workspaceId){
+    _sb.from('agent_feedback').insert({workspace_id:S.workspaceId,agent_id:agentId,action:action,content_id:contentId||null,suggestion_preview:(suggestion||'').slice(0,300),context:{}}).then(function(){}).catch(function(){});
+  }
+  trackEvent('agent_feedback',contentId,{agent:agentId,action:action});
+}
+window.agentFeedback=agentFeedback;
+
+function agentRemember(agentId,key,value){
+  if(!S._agentMemory[agentId])S._agentMemory[agentId]={};
+  S._agentMemory[agentId][key]={value:value,ts:Date.now()};
+  var keys=Object.keys(S._agentMemory[agentId]);
+  if(keys.length>50)delete S._agentMemory[agentId][keys[0]];
+  save('_agentMemory');
+}
+function agentRecall(agentId,key){
+  return S._agentMemory[agentId]&&S._agentMemory[agentId][key]?S._agentMemory[agentId][key].value:null;
+}
+
+function buildWorkspaceContext(){
+  var pub=S.content.filter(function(c){return c.status==='published';});
+  var kws=S.keywords.slice(0,20);
+  var avgSEO=pub.length?Math.round(pub.reduce(function(a,c){return a+(c.seoScore||0);},0)/pub.length):0;
+  var avgAI=pub.length?Math.round(pub.reduce(function(a,c){return a+(c.aiScore||0);},0)/pub.length):0;
+  var gaps=S.keywords.filter(function(k){var kw=(k.keyword||k.term||'').toLowerCase();return!S.content.some(function(c){return(c.keyword||'').toLowerCase()===kw;});}).slice(0,5);
+  return{siteName:S.siteName,totalArticles:S.content.length,published:pub.length,avgSEOScore:avgSEO,avgAIScore:avgAI,
+    topKeywords:kws.map(function(k){return k.keyword||k.term;}).join(', '),
+    collections:S.collections.map(function(c){return c.name;}).join(', '),
+    contentGaps:gaps.map(function(k){return k.keyword||k.term;}).join(', '),
+    niche:S.settings.niche||S.siteName};
+}
+
+function findSimilarContent(item){
+  var kw=(item.keyword||'').toLowerCase();
+  var tags=(item.tags||[]).map(function(t){return t.toLowerCase();});
+  return S.content.filter(function(c){
+    if(c.id===item.id)return false;
+    var ckw=(c.keyword||'').toLowerCase();
+    var ctags=(c.tags||[]).map(function(t){return t.toLowerCase();});
+    return(kw&&ckw===kw)||tags.some(function(t){return ctags.indexOf(t)>=0;});
+  }).slice(0,5);
+}
+
+function calcAgentEffectiveness(){
+  var stats={};
+  S._agentFeedback.forEach(function(f){
+    if(!stats[f.agent_id])stats[f.agent_id]={accepted:0,rejected:0,modified:0,ignored:0,total:0};
+    stats[f.agent_id][f.action]=(stats[f.agent_id][f.action]||0)+1;
+    stats[f.agent_id].total++;
+  });
+  var scores={};
+  Object.keys(stats).forEach(function(agentId){
+    var s=stats[agentId];
+    scores[agentId]={
+      effectiveness:s.total?Math.round(((s.accepted+0.5*s.modified)/s.total)*100):0,
+      acceptRate:s.total?Math.round(s.accepted/s.total*100):0,
+      totalRuns:s.total,
+      trend:'stable'
+    };
+  });
+  return scores;
+}
+
+function recommendAgents(item){
+  var recs=[];
+  var eff=calcAgentEffectiveness();
+  if(item){
+    if((item.seoScore||0)<50)recs.push({agent:'heading-fix',reason:'Low SEO score ('+item.seoScore+')',score:90});
+    if(!item.keyword)recs.push({agent:'intent-classify',reason:'No target keyword assigned',score:85});
+    if((item.wordCount||0)<500)recs.push({agent:'gap-fill',reason:'Thin content ('+item.wordCount+' words)',score:88});
+    var fk=fleschKincaid(item.content||item.body||'');
+    if(fk.ease<50)recs.push({agent:'readability-fix',reason:'Hard to read (Flesch '+Math.round(fk.ease)+')',score:82});
+    if(!item.metaDescription&&!item.metaDesc)recs.push({agent:'meta-validator',reason:'Missing meta description',score:80});
+    if(!item.metaTitle&&!item.seoTitle)recs.push({agent:'meta-validator',reason:'Missing meta title',score:78});
+    if((item.aiScore||0)<60)recs.push({agent:'eeat-score',reason:'Low AI quality score ('+item.aiScore+')',score:75});
+  }
+  recs.forEach(function(r){if(eff[r.agent])r.score=Math.round(r.score*(eff[r.agent].effectiveness/100+0.5));});
+  return recs.sort(function(a,b){return b.score-a.score;}).slice(0,5);
+}
+window.recommendAgents=recommendAgents;
+
 function updateAgentWidget(){
   var running=Object.values(S._agents.registry).filter(function(a){return a.enabled;}).length;
   var el=document.getElementById('agent-widget-label');
@@ -8069,7 +8158,7 @@ var MICRO_AGENTS=[
 {id:'competitor-affiliate',cat:'Monetization',name:'Competitor Affiliate Analyzer',ico:'🕵️',desc:'Identify competitor monetization strategies',credits:1,fn:function(){return{prompt:'For a '+S.siteName+' niche site globally, what are the top 5 affiliate programs competitors use? For each: network name, commission structure, minimum payout, best for which content type.',system:'Affiliate marketing researcher for the target market.',parse:'text'};}},
 ];
 
-/* ── Micro-Agent Dispatcher ── */
+/* ── Micro-Agent Dispatcher (with context + memory) ── */
 async function runMicroAgent(agentId,itemOrNull){
   var agent=MICRO_AGENTS.find(function(a){return a.id===agentId;});
   if(!agent){toast('Agent not found: '+agentId,'error');return null;}
@@ -8078,8 +8167,21 @@ async function runMicroAgent(agentId,itemOrNull){
   agentLog(agentId,'run',{item:item.title||'workspace'},agent.credits);
   trackEvent('micro_agent_run',null,{agent:agentId});
   if(config.noAI){return config.result;}
+  // Inject workspace context + memory (Phase 2)
+  var ctx=buildWorkspaceContext();
+  config.prompt+='\n\n[Workspace: '+ctx.siteName+', '+ctx.totalArticles+' articles, '+ctx.published+' published, avg SEO '+ctx.avgSEOScore+'/100, keywords: '+ctx.topKeywords+']';
+  var similar=findSimilarContent(item);
+  if(similar.length>0)config.prompt+='\n[Similar articles: '+similar.map(function(c){return c.title+' (SEO:'+c.seoScore+')';}).join(', ')+']';
+  var lastSugg=agentRecall(agentId,'lastSuggestion');
+  if(lastSugg)config.prompt+='\n[Previous suggestion (do NOT repeat): '+String(lastSugg).slice(0,200)+']';
   try{
+    var startTs=Date.now();
     var raw=await callAI(config.prompt,{system:config.system||'AI assistant.',maxTokens:config.maxTokens||800});
+    var dur=Date.now()-startTs;
+    agentRemember(agentId,'lastSuggestion',String(raw).slice(0,300));
+    agentRemember(agentId,'lastRunTs',Date.now());
+    // Sync to Supabase agent_runs
+    if(_sb&&S.workspaceId){_sb.from('agent_runs').insert({workspace_id:S.workspaceId,agent_id:agentId,action:'run',credits_used:agent.credits,result_preview:String(raw).slice(0,200),duration_ms:dur}).then(function(){}).catch(function(){});}
     if(config.parse==='json'){
       try{return JSON.parse(raw.replace(/```json|```/g,'').trim());}
       catch(e2){return raw;}
@@ -8096,12 +8198,83 @@ async function runMicroAgentUI(agentId){
   var outEl=document.getElementById('micro-agent-output');
   if(outEl){outEl.className='ai-output-area';outEl.innerHTML='Running '+agent.name+'…';}
   var result=await runMicroAgent(agentId,item||{title:S.siteName,content:'',keyword:''});
+  window._lastMicroResult={agentId:agentId,result:result,contentId:item?item.id:null};
   if(outEl){
-    if(typeof result==='object')outEl.textContent=JSON.stringify(result,null,2);
-    else outEl.textContent=result;
+    var resultText=typeof result==='object'?JSON.stringify(result,null,2):String(result);
+    outEl.textContent=resultText;
+    // Accept/Reject toolbar (flywheel)
+    var toolbar=document.getElementById('micro-agent-toolbar');
+    if(!toolbar){toolbar=document.createElement('div');toolbar.id='micro-agent-toolbar';toolbar.style.cssText='display:flex;gap:8px;margin-top:8px;padding:8px;background:var(--c2);border-radius:var(--r8);border:1px solid var(--br)';outEl.parentNode.insertBefore(toolbar,outEl.nextSibling);}
+    toolbar.innerHTML='<button class="btn btn-primary btn-xs" onclick="acceptAgentResult()">✅ Apply</button><button class="btn btn-ghost btn-xs" onclick="dismissAgentResult()">❌ Dismiss</button><button class="btn btn-ghost btn-xs" onclick="editAgentResult()">✏️ Edit & Apply</button><span style="margin-left:auto;font-size:10px;color:var(--t3)">Feedback improves agent quality</span>';
   }
 }
 window.runMicroAgentUI=runMicroAgentUI;
+
+function acceptAgentResult(){
+  var d=window._lastMicroResult;if(!d)return;
+  agentFeedback(d.agentId,'accepted',d.contentId,String(d.result).slice(0,300));
+  toast('Agent suggestion applied — feedback recorded','success');
+  var toolbar=document.getElementById('micro-agent-toolbar');
+  if(toolbar)toolbar.innerHTML='<span style="color:var(--gr);font-size:11px">✅ Applied — thank you for the feedback</span>';
+}
+window.acceptAgentResult=acceptAgentResult;
+function dismissAgentResult(){
+  var d=window._lastMicroResult;if(!d)return;
+  agentFeedback(d.agentId,'rejected',d.contentId,String(d.result).slice(0,300));
+  toast('Dismissed — feedback recorded','info');
+  var toolbar=document.getElementById('micro-agent-toolbar');
+  if(toolbar)toolbar.innerHTML='<span style="color:var(--t3);font-size:11px">❌ Dismissed — we\'ll improve next time</span>';
+}
+window.dismissAgentResult=dismissAgentResult;
+function editAgentResult(){
+  var d=window._lastMicroResult;if(!d)return;
+  agentFeedback(d.agentId,'modified',d.contentId,String(d.result).slice(0,300));
+  toast('Modified — feedback recorded','info');
+  var outEl=document.getElementById('micro-agent-output');
+  if(outEl)outEl.contentEditable='true';
+  var toolbar=document.getElementById('micro-agent-toolbar');
+  if(toolbar)toolbar.innerHTML='<span style="color:var(--am);font-size:11px">✏️ Edit the output above, then copy what you need</span>';
+}
+window.editAgentResult=editAgentResult;
+
+/* ── Agent Chains ── */
+var AGENT_CHAINS=[
+  {id:'full-article-pipeline',name:'Full Article Pipeline',ico:'🔄',desc:'Gap analysis → Brief → Draft → SEO optimize → Schema',credits:'~8',
+    steps:[{agent:'kw-gap',label:'Finding content gaps'},{agent:'kw-cluster',label:'Building topic clusters'},{agent:'readability-fix',label:'Improving readability'},{agent:'heading-fix',label:'Fixing heading structure'},{agent:'schema-article',label:'Generating schema'}]},
+  {id:'seo-audit-fix',name:'SEO Audit & Fix',ico:'🛡️',desc:'Full SEO scan → optimize headings → align intent → snippets',credits:'~5',
+    steps:[{agent:'kw-density',label:'Checking keyword density'},{agent:'heading-fix',label:'Fixing heading structure'},{agent:'intent-align',label:'Aligning search intent'},{agent:'zero-click',label:'Optimizing for featured snippets'},{agent:'anchor-optimize',label:'Improving anchor text'}]},
+  {id:'content-refresh-chain',name:'Content Refresh',ico:'♻️',desc:'Find stale → fill gaps → improve readability → optimize keywords',credits:'~4',
+    steps:[{agent:'refresh-recommend',label:'Finding stale articles'},{agent:'gap-fill',label:'Finding missing sections'},{agent:'readability-fix',label:'Simplifying language'},{agent:'kw-density',label:'Optimizing keyword usage'}]},
+  {id:'monetization-chain',name:'Monetization Setup',ico:'💰',desc:'Find revenue articles → suggest affiliates → place links → optimize',credits:'~4',
+    steps:[{agent:'evergreen-revenue',label:'Finding revenue candidates'},{agent:'affiliate-suggest',label:'Suggesting affiliates'},{agent:'link-placement',label:'Placing affiliate links'},{agent:'ad-optimize',label:'Optimizing ad placement'}]}
+];
+
+async function runAgentChain(chainId,item){
+  var chain=AGENT_CHAINS.find(function(c){return c.id===chainId;});
+  if(!chain){toast('Chain not found','error');return;}
+  var results=[];
+  var progEl=document.getElementById('chain-progress');
+  var outEl=document.getElementById('chain-output');
+  for(var i=0;i<chain.steps.length;i++){
+    var step=chain.steps[i];
+    if(progEl)progEl.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div style="width:12px;height:12px;border:2px solid var(--vi);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>Step '+(i+1)+'/'+chain.steps.length+': '+step.label+'…</div>';
+    var stepResult=await runMicroAgent(step.agent,item);
+    results.push({step:step.agent,label:step.label,result:stepResult});
+  }
+  agentLog(chainId,'chain_complete',{steps:chain.steps.length},0);
+  if(progEl)progEl.innerHTML='<span style="color:var(--gr)">✅ Chain complete — '+results.length+' steps executed</span>';
+  if(outEl){
+    var html='';
+    results.forEach(function(r,idx){
+      var txt=typeof r.result==='object'?JSON.stringify(r.result,null,2):String(r.result);
+      html+='<div style="margin-bottom:12px;padding:10px;background:var(--c2);border-radius:var(--r8);border:1px solid var(--br)"><div style="font-size:11px;font-weight:600;color:var(--vi);margin-bottom:4px">Step '+(idx+1)+': '+r.label+'</div><pre style="font-size:11px;color:var(--t2);white-space:pre-wrap;max-height:200px;overflow-y:auto">'+txt.replace(/</g,'&lt;')+'</pre></div>';
+    });
+    outEl.innerHTML=html;
+  }
+  if(_sb&&S.workspaceId){_sb.from('agent_runs').insert({workspace_id:S.workspaceId,agent_id:chainId,chain_id:chainId,action:'chain_complete',credits_used:0,result_preview:results.length+' steps',duration_ms:0}).then(function(){}).catch(function(){});}
+  return results;
+}
+window.runAgentChain=runAgentChain;
 
 /* ── Meta-Agents (Monitor other agents) ── */
 function metaAgentPerformance(){
@@ -8236,7 +8409,29 @@ function pgAgents(){
     metaHtml+='<div class="panel" style="margin-bottom:16px"><div class="panel-hd"><div class="panel-title">Agent Performance</div></div><div class="tbl-wrap"><table style="width:100%;font-size:12px"><tr style="color:var(--t3)"><td>Agent</td><td>Runs</td><td>Total Credits</td><td>Avg Credits</td><td>Last Run</td></tr>'+metaPerf.slice(0,15).map(function(s){return'<tr><td style="color:var(--t1)">'+s.agent+'</td><td>'+s.runs+'</td><td>'+s.totalCredits+'</td><td>'+s.avgCredits+'</td><td style="color:var(--t3)">'+s.lastRun+'</td></tr>';}).join('')+'</table></div></div>';
   }
 
-  return'<div style="margin-bottom:20px"><div class="page-eyebrow">Autonomous Intelligence</div><h1 class="page-title">AI Agents</h1><p class="page-sub">'+(MICRO_AGENTS.length+8)+' agents — 8 autonomous + '+MICRO_AGENTS.length+' micro-agents + 3 meta-agents. Run tasks, monitor SEO, create content, optimize everything.</p></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" class="stagger">'+cards+'</div>'+reportHtml+microHtml+metaHtml+'<div class="panel"><div class="panel-hd"><div class="panel-title">Agent History</div></div><div class="tbl-wrap"><table style="width:100%;font-size:12px"><tr style="color:var(--t3)"><td>Time</td><td>Agent</td><td>Action</td><td>Result</td><td>Credits</td></tr>'+historyRows+'</table></div></div>';
+  // Agent Chains section
+  var chainHtml='<div style="margin:28px 0 14px"><h2 style="font-size:18px;font-weight:700;color:var(--t1);margin-bottom:4px">🔗 Agent Chains <span style="font-size:13px;color:var(--t3);font-weight:400">'+AGENT_CHAINS.length+' multi-step workflows</span></h2><p style="font-size:12px;color:var(--t3);margin-bottom:12px">Chains run multiple agents in sequence, feeding results forward. Select an article first.</p></div>';
+  chainHtml+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px">'+AGENT_CHAINS.map(function(ch){return'<div class="panel" style="padding:14px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:20px">'+ch.ico+'</span><div><div style="font-size:13px;font-weight:600;color:var(--t1)">'+ch.name+'</div><div style="font-size:10px;color:var(--t3)">'+ch.steps.length+' steps · ~'+ch.credits+' credits</div></div></div><p style="font-size:11px;color:var(--t2);margin-bottom:10px">'+ch.desc+'</p><button class="btn btn-primary btn-xs" onclick="var sel=document.getElementById(\'micro-agent-article-sel\');var item=sel?S.content.find(function(c){return c.id===parseInt(sel.value);}):S.content[0];runAgentChain(\''+ch.id+'\',item)">Run Chain ▶</button></div>';}).join('')+'</div>';
+  chainHtml+='<div id="chain-progress" style="font-size:12px;color:var(--t2);margin-bottom:8px"></div><div id="chain-output"></div>';
+
+  // Effectiveness section
+  var eff=calcAgentEffectiveness();
+  var effEntries=Object.keys(eff).map(function(k){return{id:k,e:eff[k]};}).sort(function(a,b){return b.e.effectiveness-a.e.effectiveness;});
+  var effHtml='';
+  if(effEntries.length>0){
+    effHtml='<div style="margin:28px 0 14px"><h2 style="font-size:18px;font-weight:700;color:var(--t1);margin-bottom:4px">📊 Agent Effectiveness <span style="font-size:13px;color:var(--t3);font-weight:400">from your feedback</span></h2></div>';
+    effHtml+='<div class="panel" style="margin-bottom:16px"><div class="panel-hd"><div class="panel-title">Agent Effectiveness Scores</div></div><div class="tbl-wrap"><table style="width:100%;font-size:12px"><tr style="color:var(--t3)"><td>Agent</td><td>Effectiveness</td><td>Accept Rate</td><td>Runs</td></tr>'+effEntries.slice(0,10).map(function(e){var color=e.e.effectiveness>=70?'var(--gr)':e.e.effectiveness>=40?'var(--am)':'var(--re)';return'<tr><td style="color:var(--t1)">'+e.id+'</td><td style="color:'+color+';font-weight:600">'+e.e.effectiveness+'%</td><td>'+e.e.acceptRate+'%</td><td>'+e.e.totalRuns+'</td></tr>';}).join('')+'</table></div></div>';
+  }
+
+  // Recommendations section
+  var selItem=S.content[0];
+  var recs=recommendAgents(selItem);
+  var recHtml='';
+  if(recs.length>0){
+    recHtml='<div class="panel" style="margin-bottom:16px;border-color:var(--vi)"><div class="panel-hd"><div class="panel-title" style="color:var(--vi)">💡 Recommended For You</div></div><div style="padding:10px">'+recs.map(function(r){return'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--br)"><button class="btn btn-ghost btn-xs" onclick="runMicroAgentUI(\''+r.agent+'\')">Run '+r.agent+'</button><span style="font-size:11px;color:var(--t2)">'+r.reason+'</span></div>';}).join('')+'</div></div>';
+  }
+
+  return'<div style="margin-bottom:20px"><div class="page-eyebrow">Autonomous Intelligence</div><h1 class="page-title">AI Agents</h1><p class="page-sub">'+(MICRO_AGENTS.length+8+AGENT_CHAINS.length)+' agents — 8 autonomous + '+MICRO_AGENTS.length+' micro-agents + '+AGENT_CHAINS.length+' chains + 3 meta-agents. Run tasks, monitor SEO, create content, optimize everything.</p></div>'+recHtml+'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" class="stagger">'+cards+'</div>'+reportHtml+chainHtml+microHtml+effHtml+metaHtml+'<div class="panel"><div class="panel-hd"><div class="panel-title">Agent History</div></div><div class="tbl-wrap"><table style="width:100%;font-size:12px"><tr style="color:var(--t3)"><td>Time</td><td>Agent</td><td>Action</td><td>Result</td><td>Credits</td></tr>'+historyRows+'</table></div></div>';
 }
 
 function openAutopilotModal(){

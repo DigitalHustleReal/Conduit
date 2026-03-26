@@ -724,7 +724,13 @@ const S={
   demoCallsUsed:  DB.get('demoCallsUsed', 0),     // free demo calls without API key
   _agentFeedback: DB.get('_agentFeedback', []),   // [{agent_id, action, content_id, suggestion, ts}]
   _agentMemory: DB.get('_agentMemory', {}),       // {agentId: {key: {value, ts}}}
-
+  _autopilot: DB.get('_autopilot', {
+    enabled:false,
+    creditBudget:{daily:10,weekly:50,used_today:0,used_week:0,last_reset:null,week_reset:null},
+    schedule:{conductor_interval:21600000,content_days:[1,3,5],seo_days:[2,4],distribution_days:[1,2,3,4,5],maintenance_days:[6]},
+    rules:{min_seo_score:60,min_ai_score:70,max_articles_per_day:3,auto_publish:false,auto_distribute:true,auto_refresh_days:90,auto_fix_seo:true,auto_interlink:true},
+    log:[],stats:{total_runs:0,total_credits:0,articles_created:0,issues_fixed:0,distributions:0}
+  }),
 
   pricingPlan:DB.get('pricingPlan','free'),
   credits:DB.get('credits',{aiCalls:0,aiLimit:100,storage:0,storageLimit:500,apiReqs:0,apiLimit:1000,seats:1,seatLimit:1,socialPosts:0,socialLimit:10,resetDate:new Date(new Date().getFullYear(),new Date().getMonth()+1,1).getTime()}),
@@ -8381,6 +8387,226 @@ function initAgents(){
   updateAgentWidget();
 }
 
+/* ═══════════ AUTONOMOUS AGENT HIERARCHY ═══════════ */
+
+/* ── Credit Budget System ── */
+function autopilotBudgetCheck(needed){
+  var ap=S._autopilot;if(!ap.enabled)return false;
+  // Daily reset check
+  var now=new Date();var today=now.toDateString();
+  if(ap.creditBudget.last_reset!==today){ap.creditBudget.used_today=0;ap.creditBudget.last_reset=today;}
+  // Weekly reset (Monday)
+  var weekKey=now.getFullYear()+'-W'+Math.ceil((now.getTime()-new Date(now.getFullYear(),0,1).getTime())/(7*86400000));
+  if(ap.creditBudget.week_reset!==weekKey){ap.creditBudget.used_week=0;ap.creditBudget.week_reset=weekKey;}
+  return(ap.creditBudget.used_today+needed)<=ap.creditBudget.daily&&(ap.creditBudget.used_week+needed)<=ap.creditBudget.weekly;
+}
+function autopilotSpend(amount,director,action){
+  S._autopilot.creditBudget.used_today+=amount;
+  S._autopilot.creditBudget.used_week+=amount;
+  S._autopilot.stats.total_credits+=amount;
+  save('_autopilot');
+}
+
+/* ── TIER 1: CONDUCTOR (0 credits, pure heuristic) ── */
+async function agentConductor(){
+  var ap=S._autopilot;if(!ap.enabled)return;
+  autopilotBudgetCheck(0);// trigger resets
+  var dayOfWeek=new Date().getDay();// 0=Sun,1=Mon...6=Sat
+  var remaining=ap.creditBudget.daily-ap.creditBudget.used_today;
+  if(remaining<=0){agentLog('conductor','skip',{reason:'daily budget exhausted'},0);return;}
+  var decisions=[];
+  // Analyze workspace state
+  var gaps=S.keywords.filter(function(k){var kw=(k.keyword||k.term||'').toLowerCase();return!S.content.some(function(c){return(c.keyword||'').toLowerCase()===kw&&c.status==='published';});});
+  var noMeta=S.content.filter(function(c){return c.status==='published'&&(!c.metaTitle&&!c.seoTitle);});
+  var lowSEO=S.content.filter(function(c){return c.status==='published'&&(c.seoScore||0)<50;});
+  var stale=S.content.filter(function(c){return c.status==='published'&&c.updated&&(Date.now()-c.updated)>ap.rules.auto_refresh_days*86400000;});
+  var undistributed=S.content.filter(function(c){return c.status==='published'&&!agentRecall('distribution-done',String(c.id));});
+  // Allocate budgets
+  var seoBudget=Math.max(1,Math.floor(remaining*0.3));
+  var contentBudget=Math.max(1,Math.floor(remaining*0.4));
+  var distBudget=Math.max(1,Math.floor(remaining*0.2));
+  var maintBudget=Math.max(0,remaining-seoBudget-contentBudget-distBudget);
+  // Run Directors based on schedule
+  if(ap.schedule.seo_days.indexOf(dayOfWeek)>=0||lowSEO.length>3||noMeta.length>0){
+    decisions.push({director:'SEO',budget:seoBudget,reason:lowSEO.length+' low SEO + '+noMeta.length+' missing meta'});
+    var seoResult=await directorSEO(seoBudget);
+    decisions.push({result:'SEO done',credits:seoResult.credits_used,fixed:seoResult.issues_fixed});
+  }
+  if(ap.schedule.content_days.indexOf(dayOfWeek)>=0&&gaps.length>0){
+    decisions.push({director:'Content',budget:contentBudget,reason:gaps.length+' keyword gaps'});
+    var contentResult=await directorContent(contentBudget);
+    decisions.push({result:'Content done',credits:contentResult.credits_used,created:contentResult.articles_created});
+  }
+  if(ap.schedule.distribution_days.indexOf(dayOfWeek)>=0&&undistributed.length>0){
+    decisions.push({director:'Distribution',budget:distBudget,reason:undistributed.length+' undistributed articles'});
+    var distResult=await directorDistribution(distBudget);
+    decisions.push({result:'Distribution done',credits:distResult.credits_used,posts:distResult.posts_generated});
+  }
+  if(ap.schedule.maintenance_days.indexOf(dayOfWeek)>=0||stale.length>5){
+    decisions.push({director:'Maintenance',budget:maintBudget,reason:stale.length+' stale articles'});
+    var maintResult=await directorMaintenance(maintBudget);
+    decisions.push({result:'Maintenance done',credits:maintResult.credits_used,scans:maintResult.scans_run});
+  }
+  ap.stats.total_runs++;
+  ap.log.unshift({ts:Date.now(),decisions:decisions,budget_remaining:ap.creditBudget.daily-ap.creditBudget.used_today});
+  if(ap.log.length>50)ap.log=ap.log.slice(0,50);
+  save('_autopilot');
+  agentLog('conductor','orchestrate',{decisions:decisions.length,remaining:ap.creditBudget.daily-ap.creditBudget.used_today},0);
+  toast('🤖 Conductor ran — '+decisions.length+' decisions, '+Math.round(ap.creditBudget.daily-ap.creditBudget.used_today)+' credits left today','info');
+}
+window.agentConductor=agentConductor;
+
+/* ── TIER 2: SEO DIRECTOR ── */
+async function directorSEO(budget){
+  var result={issues_found:0,issues_fixed:0,credits_used:0};
+  // FREE scans first
+  await runMicroAgent('broken-link-check',null);
+  await runMicroAgent('decay-detector',null);
+  await runMicroAgent('outdated-stats',null);
+  result.issues_found+=3;// scans ran
+  // Find fixable issues on published content
+  var published=S.content.filter(function(c){return c.status==='published';});
+  for(var i=0;i<published.length&&result.credits_used<budget;i++){
+    var item=published[i];
+    // Missing meta — auto-fix (1 credit)
+    if((!item.metaTitle&&!item.seoTitle)&&autopilotBudgetCheck(1)){
+      var metaResult=await runMicroAgent('auto-meta-gen',item);
+      if(metaResult&&typeof metaResult==='object'&&metaResult.metaTitle){
+        item.metaTitle=metaResult.metaTitle;item.seoTitle=metaResult.metaTitle;
+        if(metaResult.metaDescription){item.metaDescription=metaResult.metaDescription;item.metaDesc=metaResult.metaDescription;}
+        save('content');result.issues_fixed++;
+      }
+      autopilotSpend(1,'seo','auto-meta-gen');result.credits_used++;
+    }
+    // Missing slug — auto-fix (FREE)
+    if(!item.slug&&item.title){
+      item.slug=item.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
+      save('content');result.issues_fixed++;
+    }
+    // Low SEO score — fix headings (1 credit)
+    if((item.seoScore||0)<50&&autopilotBudgetCheck(1)&&S._autopilot.rules.auto_fix_seo){
+      await runMicroAgent('heading-fix',item);
+      autopilotSpend(1,'seo','heading-fix');result.credits_used++;result.issues_fixed++;
+    }
+  }
+  // Rescore all (FREE)
+  await runMicroAgent('auto-score-all',null);
+  S._autopilot.stats.issues_fixed+=result.issues_fixed;save('_autopilot');
+  agentLog('directorSEO','complete',result,0);
+  return result;
+}
+
+/* ── TIER 2: CONTENT DIRECTOR ── */
+async function directorContent(budget){
+  var result={articles_created:0,briefs_generated:0,credits_used:0};
+  var rules=S._autopilot.rules;
+  // Find keyword gaps
+  var gaps=S.keywords.filter(function(k){var kw=(k.keyword||k.term||'').toLowerCase();return!S.content.some(function(c){return(c.keyword||'').toLowerCase()===kw;});}).sort(function(a,b){return(b.volume||0)-(a.volume||0);});
+  if(gaps.length===0){agentLog('directorContent','skip',{reason:'no keyword gaps'},0);return result;}
+  // Generate editorial brief for top gap (1 credit)
+  if(autopilotBudgetCheck(1)){
+    var gapItem={title:gaps[0].keyword||gaps[0].term,keyword:gaps[0].keyword||gaps[0].term,content:'',tags:[]};
+    await runMicroAgent('editorial-brief',gapItem);
+    autopilotSpend(1,'content','editorial-brief');result.credits_used++;result.briefs_generated++;
+  }
+  // If budget allows + auto-publish, generate full article (5 credits)
+  var todayCreated=S._autopilot.log.filter(function(l){return l.ts>Date.now()-86400000;}).reduce(function(a,l){var c=l.decisions.find(function(d){return d.created;});return a+(c?c.created:0);},0);
+  if(todayCreated<rules.max_articles_per_day&&autopilotBudgetCheck(5)&&gaps.length>0){
+    var topic=gaps[0].keyword||gaps[0].term;
+    await agentContentAutopilot([topic],{collection:'Articles'});
+    autopilotSpend(5,'content','contentAutopilot');result.credits_used+=5;result.articles_created++;
+    S._autopilot.stats.articles_created++;
+  }
+  save('_autopilot');agentLog('directorContent','complete',result,0);
+  return result;
+}
+
+/* ── TIER 2: DISTRIBUTION DIRECTOR ── */
+async function directorDistribution(budget){
+  var result={posts_generated:0,credits_used:0};
+  if(!S._autopilot.rules.auto_distribute)return result;
+  var undistributed=S.content.filter(function(c){return c.status==='published'&&!agentRecall('distribution-done',String(c.id));}).slice(0,3);
+  for(var i=0;i<undistributed.length&&result.credits_used<budget;i++){
+    var item=undistributed[i];
+    // LinkedIn (1 credit)
+    if(autopilotBudgetCheck(1)){
+      var post=await runMicroAgent('social-linkedin',item);
+      agentRemember('distribution-done',String(item.id),{linkedin:true,ts:Date.now()});
+      agentRemember('social-posts',item.title+'-linkedin',String(post).slice(0,500));
+      autopilotSpend(1,'distribution','social-linkedin');result.credits_used++;result.posts_generated++;
+    }
+    // Twitter (1 credit)
+    if(autopilotBudgetCheck(1)){
+      var thread=await runMicroAgent('social-twitter',item);
+      agentRemember('social-posts',item.title+'-twitter',String(thread).slice(0,500));
+      autopilotSpend(1,'distribution','social-twitter');result.credits_used++;result.posts_generated++;
+    }
+  }
+  // Weekly newsletter (if Monday)
+  if(new Date().getDay()===1&&autopilotBudgetCheck(1)){
+    await runMicroAgent('newsletter-gen',null);
+    autopilotSpend(1,'distribution','newsletter-gen');result.credits_used++;result.posts_generated++;
+  }
+  S._autopilot.stats.distributions+=result.posts_generated;save('_autopilot');
+  agentLog('directorDistribution','complete',result,0);
+  return result;
+}
+
+/* ── TIER 2: MAINTENANCE DIRECTOR ── */
+async function directorMaintenance(budget){
+  var result={scans_run:0,issues_found:0,refreshes_done:0,credits_used:0};
+  // All FREE scans
+  await runMicroAgent('broken-link-check',null);result.scans_run++;
+  await runMicroAgent('decay-detector',null);result.scans_run++;
+  await runMicroAgent('outdated-stats',null);result.scans_run++;
+  await runMicroAgent('auto-score-all',null);result.scans_run++;
+  // Content pruning recommendation (1 credit)
+  if(autopilotBudgetCheck(1)){
+    await runMicroAgent('content-prune',null);
+    autopilotSpend(1,'maintenance','content-prune');result.credits_used++;
+  }
+  // Refresh stale articles
+  var stale=S.content.filter(function(c){return c.status==='published'&&c.updated&&(Date.now()-c.updated)>S._autopilot.rules.auto_refresh_days*86400000;}).slice(0,2);
+  for(var i=0;i<stale.length&&result.credits_used<budget;i++){
+    if(autopilotBudgetCheck(1)){
+      await runMicroAgent('readability-fix',stale[i]);
+      autopilotSpend(1,'maintenance','readability-fix');result.credits_used++;result.refreshes_done++;
+    }
+  }
+  save('_autopilot');agentLog('directorMaintenance','complete',result,0);
+  return result;
+}
+
+/* ── Autopilot Toggle ── */
+function toggleAutopilot(enable){
+  S._autopilot.enabled=enable;
+  if(enable){
+    toast('🤖 Autopilot ENABLED — Conductor will run every 6 hours','success');
+    setTimeout(agentConductor,3000);
+    _agentTimers._conductor=setInterval(agentConductor,S._autopilot.schedule.conductor_interval);
+  }else{
+    toast('Autopilot disabled','info');
+    if(_agentTimers._conductor){clearInterval(_agentTimers._conductor);delete _agentTimers._conductor;}
+  }
+  save('_autopilot');
+  if(S.page==='agents')go('agents');
+}
+window.toggleAutopilot=toggleAutopilot;
+
+function updateAutopilotBudget(field,value){
+  S._autopilot.creditBudget[field]=parseInt(value)||0;
+  save('_autopilot');
+}
+window.updateAutopilotBudget=updateAutopilotBudget;
+
+function updateAutopilotRule(field,value){
+  if(typeof value==='string'&&(value==='true'||value==='false'))value=value==='true';
+  else if(!isNaN(value))value=parseInt(value);
+  S._autopilot.rules[field]=value;
+  save('_autopilot');
+}
+window.updateAutopilotRule=updateAutopilotRule;
+
 /* ── Agent Manager Page ── */
 function pgAgents(){
   var reg=S._agents.registry;
@@ -8479,7 +8705,35 @@ function pgAgents(){
     recHtml='<div class="panel" style="margin-bottom:16px;border-color:var(--vi)"><div class="panel-hd"><div class="panel-title" style="color:var(--vi)">💡 Recommended For You</div></div><div style="padding:10px">'+recs.map(function(r){return'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--br)"><button class="btn btn-ghost btn-xs" onclick="runMicroAgentUI(\''+r.agent+'\')">Run '+r.agent+'</button><span style="font-size:11px;color:var(--t2)">'+r.reason+'</span></div>';}).join('')+'</div></div>';
   }
 
-  return'<div style="margin-bottom:20px"><div class="page-eyebrow">Autonomous Intelligence</div><h1 class="page-title">AI Agents</h1><p class="page-sub">'+(MICRO_AGENTS.length+8+AGENT_CHAINS.length)+' agents — 8 autonomous + '+MICRO_AGENTS.length+' micro-agents + '+AGENT_CHAINS.length+' chains + 3 meta-agents. Run tasks, monitor SEO, create content, optimize everything.</p></div>'+recHtml+'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" class="stagger">'+cards+'</div>'+reportHtml+chainHtml+microHtml+effHtml+metaHtml+'<div class="panel"><div class="panel-hd"><div class="panel-title">Agent History</div></div><div class="tbl-wrap"><table style="width:100%;font-size:12px"><tr style="color:var(--t3)"><td>Time</td><td>Agent</td><td>Action</td><td>Result</td><td>Credits</td></tr>'+historyRows+'</table></div></div>';
+  // Autopilot Control Panel
+  var ap=S._autopilot;
+  var apOn=ap.enabled;
+  var apLog=ap.log.slice(0,10).map(function(l){return'<tr><td style="color:var(--t3);font-size:10px">'+new Date(l.ts).toLocaleString()+'</td><td>'+l.decisions.length+' decisions</td><td>'+(l.budget_remaining||0)+' credits left</td></tr>';}).join('');
+  var autopilotHtml='<div class="panel" style="margin-bottom:20px;border-color:'+(apOn?'var(--gr)':'var(--br)')+'"><div class="panel-hd"><div class="panel-title" style="color:'+(apOn?'var(--gr)':'var(--t1)')+'">🤖 Autopilot '+(apOn?'ACTIVE':'OFF')+'</div><button class="btn '+(apOn?'btn-ghost':'btn-primary')+' btn-sm" onclick="toggleAutopilot('+(!apOn)+')">'+(!apOn?'Enable Autopilot':'Pause Autopilot')+'</button></div><div style="padding:14px">';
+  autopilotHtml+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">';
+  autopilotHtml+='<div><label style="font-size:10px;color:var(--t3)">Daily Credit Budget</label><input type="number" class="field-input" value="'+ap.creditBudget.daily+'" onchange="updateAutopilotBudget(\'daily\',this.value)" style="font-size:12px"></div>';
+  autopilotHtml+='<div><label style="font-size:10px;color:var(--t3)">Weekly Credit Budget</label><input type="number" class="field-input" value="'+ap.creditBudget.weekly+'" onchange="updateAutopilotBudget(\'weekly\',this.value)" style="font-size:12px"></div>';
+  autopilotHtml+='<div><label style="font-size:10px;color:var(--t3)">Used Today</label><div style="font-size:18px;font-weight:700;color:var(--vi)">'+ap.creditBudget.used_today+'/'+ap.creditBudget.daily+'</div></div>';
+  autopilotHtml+='<div><label style="font-size:10px;color:var(--t3)">Used This Week</label><div style="font-size:18px;font-weight:700;color:var(--vi)">'+ap.creditBudget.used_week+'/'+ap.creditBudget.weekly+'</div></div></div>';
+  // Rules
+  autopilotHtml+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;font-size:11px">';
+  autopilotHtml+='<label style="display:flex;align-items:center;gap:4px;color:var(--t2)"><input type="checkbox" '+(ap.rules.auto_publish?'checked':'')+' onchange="updateAutopilotRule(\'auto_publish\',this.checked?\'true\':\'false\')"> Auto-publish</label>';
+  autopilotHtml+='<label style="display:flex;align-items:center;gap:4px;color:var(--t2)"><input type="checkbox" '+(ap.rules.auto_distribute?'checked':'')+' onchange="updateAutopilotRule(\'auto_distribute\',this.checked?\'true\':\'false\')"> Auto-distribute</label>';
+  autopilotHtml+='<label style="display:flex;align-items:center;gap:4px;color:var(--t2)"><input type="checkbox" '+(ap.rules.auto_fix_seo?'checked':'')+' onchange="updateAutopilotRule(\'auto_fix_seo\',this.checked?\'true\':\'false\')"> Auto-fix SEO</label>';
+  autopilotHtml+='<label style="display:flex;align-items:center;gap:4px;color:var(--t2)"><input type="checkbox" '+(ap.rules.auto_interlink?'checked':'')+' onchange="updateAutopilotRule(\'auto_interlink\',this.checked?\'true\':\'false\')"> Auto-interlink</label></div>';
+  // Stats
+  autopilotHtml+='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px">';
+  autopilotHtml+='<div class="metric"><div class="metric-val">'+ap.stats.total_runs+'</div><div class="metric-label">Conductor Runs</div></div>';
+  autopilotHtml+='<div class="metric"><div class="metric-val">'+ap.stats.total_credits+'</div><div class="metric-label">Credits Used</div></div>';
+  autopilotHtml+='<div class="metric"><div class="metric-val">'+ap.stats.articles_created+'</div><div class="metric-label">Articles Created</div></div>';
+  autopilotHtml+='<div class="metric"><div class="metric-val">'+ap.stats.issues_fixed+'</div><div class="metric-label">Issues Fixed</div></div>';
+  autopilotHtml+='<div class="metric"><div class="metric-val">'+(ap.stats.distributions||0)+'</div><div class="metric-label">Distributions</div></div></div>';
+  // Conductor Log
+  if(apLog)autopilotHtml+='<div style="margin-top:8px"><div style="font-size:11px;font-weight:600;color:var(--t2);margin-bottom:4px">Recent Conductor Decisions</div><table style="width:100%;font-size:11px"><tr style="color:var(--t3)"><td>Time</td><td>Decisions</td><td>Budget Left</td></tr>'+apLog+'</table></div>';
+  autopilotHtml+='<div style="margin-top:10px"><button class="btn btn-ghost btn-xs" onclick="agentConductor()">▶ Run Conductor Now</button></div>';
+  autopilotHtml+='</div></div>';
+
+  return'<div style="margin-bottom:20px"><div class="page-eyebrow">Autonomous Intelligence</div><h1 class="page-title">AI Agents</h1><p class="page-sub">'+(MICRO_AGENTS.length+8+AGENT_CHAINS.length)+' agents — 8 autonomous + '+MICRO_AGENTS.length+' micro-agents + '+AGENT_CHAINS.length+' chains + 4 directors + 1 conductor. Fully autonomous content operations.</p></div>'+autopilotHtml+recHtml+'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" class="stagger">'+cards+'</div>'+reportHtml+chainHtml+microHtml+effHtml+metaHtml+'<div class="panel"><div class="panel-hd"><div class="panel-title">Agent History</div></div><div class="tbl-wrap"><table style="width:100%;font-size:12px"><tr style="color:var(--t3)"><td>Time</td><td>Agent</td><td>Action</td><td>Result</td><td>Credits</td></tr>'+historyRows+'</table></div></div>';
 }
 
 function openAutopilotModal(){
@@ -8923,6 +9177,11 @@ async function initConduit(){
   updateCreditMeter();
   trackEvent('session_start');
   initAgents();
+  // Start Autopilot Conductor if enabled
+  if(S._autopilot.enabled){
+    setTimeout(agentConductor,5000);
+    _agentTimers._conductor=setInterval(agentConductor,S._autopilot.schedule.conductor_interval);
+  }
 
   if(!_sb){
     // No Supabase configured — run in localStorage-only mode

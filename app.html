@@ -666,6 +666,9 @@ kbd{font-family:'Fira Code',monospace;font-size:10px;background:var(--c3);paddin
 <script>
 'use strict';
 
+/* ═══════════ SECURITY: HTML ESCAPE ═══════════ */
+function escapeHtml(str){if(!str)return'';return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
 /* ═══════════ SUPABASE INIT ═══════════ */
 const _sbUrl = document.querySelector('meta[name="sb-url"]')?.content || '';
 const _sbAnon = document.querySelector('meta[name="sb-anon"]')?.content || '';
@@ -810,11 +813,22 @@ function _syncToSupabase(k){
         return;
       }
       if(mapping.isArray && Array.isArray(S[k])){
-        // Delete existing and re-insert (simple full-sync strategy)
-        await _sb.from(mapping.table).delete().eq('workspace_id', S.workspaceId);
+        // Upsert strategy: insert with conflict resolution on workspace_id + unique fields
         const rows = S[k].map(mapping.mapFn).filter(function(r){ return r; });
         if(rows.length > 0){
-          await _sb.from(mapping.table).insert(rows);
+          // Use upsert with onConflict for content (slug), keywords (keyword), etc.
+          var onConflictCol = mapping.table === 'content' ? 'workspace_id,slug' :
+                              mapping.table === 'keywords' ? 'workspace_id,keyword' : '';
+          if(onConflictCol){
+            await _sb.from(mapping.table).upsert(rows,{onConflict:onConflictCol,ignoreDuplicates:false});
+          } else {
+            // For tables without unique constraint, fallback to delete+insert
+            await _sb.from(mapping.table).delete().eq('workspace_id', S.workspaceId);
+            await _sb.from(mapping.table).insert(rows);
+          }
+        } else {
+          // Empty array = clear all rows for this workspace
+          await _sb.from(mapping.table).delete().eq('workspace_id', S.workspaceId);
         }
       }
     } catch(e){
@@ -1223,7 +1237,7 @@ function trackEvent(eventType, contentId, metadata){
   if(S._analyticsEvents.length>1000)S._analyticsEvents=S._analyticsEvents.slice(-1000);
   DB.set('analyticsEvents',S._analyticsEvents);
   if(_sb&&S.workspaceId){
-    _sb.from('analytics_events').insert({workspace_id:S.workspaceId,event_type:eventType,content_id:typeof contentId==='string'?contentId:null,metadata:metadata||{}}).then(function(){}).catch(function(){});
+    _sb.from('analytics_events').insert({workspace_id:S.workspaceId,event_type:eventType,content_id:typeof contentId==='string'?contentId:null,metadata:metadata||{}}).then(function(){}).catch(function(e){console.warn('Supabase async:',e.message||e);});
   }
 }
 
@@ -2173,7 +2187,23 @@ function openNewContent(){
   },100);
 }
 
-function formatText(id,fmt){}
+function formatText(id,fmt){
+  var el=document.getElementById(id);if(!el)return;
+  var sel=window.getSelection();if(!sel.rangeCount)return;
+  var range=sel.getRangeAt(0);var selectedText=range.toString();if(!selectedText)return;
+  var wrap='';
+  if(fmt==='bold')wrap='**'+selectedText+'**';
+  else if(fmt==='italic')wrap='*'+selectedText+'*';
+  else if(fmt==='h2')wrap='\n## '+selectedText+'\n';
+  else if(fmt==='h3')wrap='\n### '+selectedText+'\n';
+  else if(fmt==='link')wrap='['+selectedText+'](url)';
+  else if(fmt==='code')wrap='`'+selectedText+'`';
+  else if(fmt==='quote')wrap='\n> '+selectedText+'\n';
+  else if(fmt==='ul')wrap='\n- '+selectedText.split('\n').join('\n- ')+'\n';
+  else wrap=selectedText;
+  range.deleteContents();range.insertNode(document.createTextNode(wrap));
+}
+window.formatText=formatText;
 
 function saveNewContent(){
   const title=document.getElementById('nc-title')?.value?.trim();
@@ -7764,7 +7794,7 @@ function agentFeedback(agentId, action, contentId, suggestion){
   if(S._agentFeedback.length>200)S._agentFeedback=S._agentFeedback.slice(0,200);
   save('_agentFeedback');
   if(_sb&&S.workspaceId){
-    _sb.from('agent_feedback').insert({workspace_id:S.workspaceId,agent_id:agentId,action:action,content_id:contentId||null,suggestion_preview:(suggestion||'').slice(0,300),context:{}}).then(function(){}).catch(function(){});
+    _sb.from('agent_feedback').insert({workspace_id:S.workspaceId,agent_id:agentId,action:action,content_id:contentId||null,suggestion_preview:(suggestion||'').slice(0,300),context:{}}).then(function(){}).catch(function(e){console.warn('Supabase async:',e.message||e);});
   }
   trackEvent('agent_feedback',contentId,{agent:agentId,action:action});
 }
@@ -8237,7 +8267,7 @@ async function runMicroAgent(agentId,itemOrNull){
     agentRemember(agentId,'lastSuggestion',String(raw).slice(0,300));
     agentRemember(agentId,'lastRunTs',Date.now());
     // Sync to Supabase agent_runs
-    if(_sb&&S.workspaceId){_sb.from('agent_runs').insert({workspace_id:S.workspaceId,agent_id:agentId,action:'run',credits_used:agent.credits,result_preview:String(raw).slice(0,200),duration_ms:dur}).then(function(){}).catch(function(){});}
+    if(_sb&&S.workspaceId){_sb.from('agent_runs').insert({workspace_id:S.workspaceId,agent_id:agentId,action:'run',credits_used:agent.credits,result_preview:String(raw).slice(0,200),duration_ms:dur}).then(function(){}).catch(function(e){console.warn('Supabase async:',e.message||e);});}
     if(config.parse==='json'){
       try{return JSON.parse(raw.replace(/```json|```/g,'').trim());}
       catch(e2){return raw;}
@@ -8252,7 +8282,7 @@ async function runMicroAgentUI(agentId){
   var selId=document.getElementById('micro-agent-article-sel')?.value;
   var item=selId?S.content.find(function(c){return c.id===parseInt(selId);}):S.content[0];
   var outEl=document.getElementById('micro-agent-output');
-  if(outEl){outEl.className='ai-output-area';outEl.innerHTML='Running '+agent.name+'…';}
+  if(outEl){outEl.className='ai-output-area';outEl.textContent='Running '+agent.name+'…';}
   var result=await runMicroAgent(agentId,item||{title:S.siteName,content:'',keyword:''});
   var config=agent.fn(item||{title:S.siteName,content:'',keyword:'',tags:[]});
   window._lastMicroResult={agentId:agentId,result:result,contentId:item?item.id:null,item:item,autoApply:config.autoApply,applyFn:config.applyFn};
@@ -8330,7 +8360,7 @@ async function runAgentChain(chainId,item){
     });
     outEl.innerHTML=html;
   }
-  if(_sb&&S.workspaceId){_sb.from('agent_runs').insert({workspace_id:S.workspaceId,agent_id:chainId,chain_id:chainId,action:'chain_complete',credits_used:0,result_preview:results.length+' steps',duration_ms:0}).then(function(){}).catch(function(){});}
+  if(_sb&&S.workspaceId){_sb.from('agent_runs').insert({workspace_id:S.workspaceId,agent_id:chainId,chain_id:chainId,action:'chain_complete',credits_used:0,result_preview:results.length+' steps',duration_ms:0}).then(function(){}).catch(function(e){console.warn('Supabase async:',e.message||e);});}
   return results;
 }
 window.runAgentChain=runAgentChain;
@@ -9091,7 +9121,7 @@ async function loadWorkspace(user){
     if(user.email){
       fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({to:user.email,template:'welcome',data:[workspace?.name||'My Workspace']})
-      }).catch(function(){});
+      }).catch(function(e){console.warn('Welcome email failed:',e.message||e);});
     }
   }
 

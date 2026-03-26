@@ -3,7 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Conduit v4 — AI-Native Content Platform</title>
+<title>Conduit — AI-Native Content Platform</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#6C63FF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="sb-url" content="https://swctotzcjhnqyaddqxni.supabase.co">
 <meta name="sb-anon" content="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN3Y3RvdHpjamhucXlhZGRxeG5pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDI2MTAsImV4cCI6MjA5MDAxODYxMH0.R55vhdQuRX41YY_NfaMdv60Q2kwowi901MCCF3-PJHw">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -668,6 +672,77 @@ kbd{font-family:'Fira Code',monospace;font-size:10px;background:var(--c3);paddin
 
 /* ═══════════ SECURITY: HTML ESCAPE ═══════════ */
 function escapeHtml(str){if(!str)return'';return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+/* ═══════════ AUDIT TRAIL ═══════════ */
+function auditLog(action,entityType,entityId,details){
+  var entry={action:action,entity_type:entityType,entity_id:entityId,details:details||{},ts:Date.now()};
+  // Store locally
+  var log=DB.get('auditLog',[]); log.unshift(entry);
+  if(log.length>500)log=log.slice(0,500);
+  DB.set('auditLog',log);
+  // Async to Supabase
+  if(_sb&&S.workspaceId){
+    _sb.from('audit_log').insert({workspace_id:S.workspaceId,action:action,entity_type:entityType,entity_id:String(entityId||''),details:details||{}}).then(function(){}).catch(function(e){console.warn('Audit log:',e.message);});
+  }
+}
+
+/* ═══════════ ROLE-BASED ACCESS CONTROL ═══════════ */
+function getUserRole(){
+  var team=S.team||[];
+  var me=team.find(function(m){return m.role;});
+  return me?me.role:'Admin';// Default to Admin for workspace owner
+}
+function canPerform(action){
+  var role=getUserRole();
+  var perms={
+    Admin:['create','edit','delete','publish','settings','team','export','agents','billing'],
+    Editor:['create','edit','publish','agents'],
+    Writer:['create','edit'],
+    Viewer:['']
+  };
+  return(perms[role]||[]).indexOf(action)>=0;
+}
+function requireRole(action){
+  if(!canPerform(action)){toast('Permission denied — '+action+' requires higher role','error');return false;}
+  return true;
+}
+
+/* ═══════════ DATA EXPORT (client-side) ═══════════ */
+function exportData(format){
+  if(!requireRole('export'))return;
+  var data={exportedAt:new Date().toISOString(),siteName:S.siteName,content:S.content,keywords:S.keywords,pipeline:S.pipeline,collections:S.collections,media:S.media};
+  if(format==='csv'){
+    // Export content as CSV
+    var items=S.content;
+    if(!items.length){toast('No content to export','info');return;}
+    var headers=['title','slug','collection','status','keyword','wordCount','aiScore','seoScore','metaTitle','metaDescription','tags','publishDate'];
+    var csv=headers.join(',')+'\n'+items.map(function(c){return headers.map(function(h){var v=c[h];if(Array.isArray(v))v=v.join(';');return'"'+(String(v||'').replace(/"/g,'""'))+'"';}).join(',');}).join('\n');
+    downloadFile('conduit-content-export.csv',csv,'text/csv');
+  }else{
+    downloadFile('conduit-export.json',JSON.stringify(data,null,2),'application/json');
+  }
+  auditLog('export',format,null,{count:S.content.length});
+  toast('Data exported as '+format.toUpperCase(),'success');
+}
+function downloadFile(name,content,type){
+  var blob=new Blob([content],{type:type});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download=name;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+window.exportData=exportData;
+
+/* ═══════════ ACTIVITY FEED ═══════════ */
+function logActivity(action,target,detail){
+  var feed=DB.get('activityFeed',[]);
+  feed.unshift({action:action,target:target,detail:detail||'',ts:Date.now(),user:getUserRole()});
+  if(feed.length>200)feed=feed.slice(0,200);
+  DB.set('activityFeed',feed);
+}
+function getActivityFeed(limit){
+  return DB.get('activityFeed',[]).slice(0,limit||20);
+}
 
 /* ═══════════ SUPABASE INIT ═══════════ */
 const _sbUrl = document.querySelector('meta[name="sb-url"]')?.content || '';
@@ -2546,7 +2621,10 @@ Return exactly this JSON structure:
   }
 }
 
-function togglePublish(id){const i=S.content.find(x=>x.id===id);if(!i)return;if(i.status!=='published'){if(!enforceQualityGates(i))return;i.status='published';i.updated=Date.now();save('content');dispatchAutomation('content.published',i);}else{i.status='draft';i.updated=Date.now();save('content');}}
+function togglePublish(id){const i=S.content.find(x=>x.id===id);if(!i)return;if(i.status!=='published'){if(!requireRole('publish'))return;if(!enforceQualityGates(i))return;i.status='published';i.publishDate=Date.now();i.updated=Date.now();save('content');dispatchAutomation('content.published',i);auditLog('publish','content',id,{title:i.title});logActivity('published',i.title,'Content published');
+    // Notify external webhooks
+    if(_sb&&S.workspaceId){fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:'content.published',slug:i.slug,workspace_id:S.workspaceId,data:{title:i.title,slug:i.slug,collection:i.collection}})}).catch(function(e){console.warn('Notify:',e.message);});}
+  }else{i.status='draft';i.updated=Date.now();save('content');auditLog('unpublish','content',id,{title:i.title});}}
 function dupContent(id){const src=S.content.find(i=>i.id===id);if(!src)return;S.content.unshift({...src,id:Date.now(),title:src.title+' (Copy)',status:'draft',updated:Date.now()});save('content');toast('Duplicated ✓','success');go(S.page);}
 function delContent(id){if(!confirm('Delete this item?'))return;const src=S.content.find(i=>i.id===id);S.content=S.content.filter(i=>i.id!==id);save('content');toast('Deleted','success');dispatchAutomation('content.deleted',{id,title:src?.title});closeAndRefresh();}
 function toggleSel(id,on){if(on)S.selected.push(id);else S.selected=S.selected.filter(x=>x!==id);}
@@ -9423,8 +9501,12 @@ window.signOutConduit = signOutConduit;
 async function initConduit(){
   buildNav();
   updateCreditMeter();
+  checkCreditReset();// Monthly reset check
   trackEvent('session_start');
+  logActivity('session','started','App loaded');
   initAgents();
+  // Register service worker for PWA + offline
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(e){console.warn('SW:',e.message);});};
   // Start Autopilot Conductor if enabled
   if(S._autopilot.enabled){
     setTimeout(agentConductor,5000);

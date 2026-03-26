@@ -1067,32 +1067,96 @@ function updateCreditMeter(){
   label.textContent=`AI: ${used}/${lim.aiCalls}`;
 }
 
-/* ═══════════ REAL SEO & AI SCORING ═══════════ */
+/* ═══════════ READABILITY + SEO + AI SCORING ═══════════ */
+
+// Flesch-Kincaid readability (pure math, no API)
+function fleschKincaid(text){
+  if(!text||text.length<50)return{grade:0,ease:0,level:'N/A'};
+  var clean=text.replace(/[#*_\[\]()>|`]/g,'').replace(/\s+/g,' ').trim();
+  var sentences=clean.split(/[.!?]+/).filter(function(s){return s.trim().length>5;});
+  var words=clean.split(/\s+/).filter(Boolean);
+  var syllables=0;
+  words.forEach(function(w){
+    w=w.toLowerCase().replace(/[^a-z]/g,'');
+    if(w.length<=3){syllables+=1;return;}
+    var count=w.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/,'').replace(/^y/,'').match(/[aeiouy]{1,2}/g);
+    syllables+=count?count.length:1;
+  });
+  var wc=words.length||1;var sc=sentences.length||1;var sy=syllables||1;
+  var grade=0.39*(wc/sc)+11.8*(sy/wc)-15.59;
+  var ease=206.835-1.015*(wc/sc)-84.6*(sy/wc);
+  grade=Math.max(0,Math.min(18,Math.round(grade*10)/10));
+  ease=Math.max(0,Math.min(100,Math.round(ease*10)/10));
+  var level=ease>=90?'Very Easy':ease>=80?'Easy':ease>=70?'Fairly Easy':ease>=60?'Standard':ease>=50?'Fairly Hard':ease>=30?'Hard':'Very Hard';
+  return{grade:grade,ease:ease,level:level,sentences:sc,words:wc,syllables:sy,avgWordsPerSentence:Math.round(wc/sc*10)/10,avgSyllablesPerWord:Math.round(sy/wc*100)/100};
+}
+
 function heuristicAIScore(item){
-  let s=30;
-  const wc=item.wordCount||(item.content||'').split(/\s+/).filter(Boolean).length;
-  if(wc>300)s+=10;if(wc>600)s+=10;if(wc>1000)s+=10;if(wc>1500)s+=5;
-  if((item.content||'').includes('## ')||/<h2/i.test(item.content||''))s+=8;
-  if(item.tags?.length>0)s+=5;if(item.tags?.length>3)s+=5;
-  if((item.metaDescription||item.metaDesc||'').length>50)s+=7;
-  if((item.metaTitle||item.seoTitle||'').length>10)s+=5;
-  if(item.keyword)s+=8;
-  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=7;
+  var s=25;
+  var wc=item.wordCount||(item.content||'').split(/\s+/).filter(Boolean).length;
+  if(wc>300)s+=8;if(wc>600)s+=8;if(wc>1000)s+=8;if(wc>1500)s+=5;
+  var content=item.content||'';
+  if(content.includes('## ')||/<h2/i.test(content))s+=7;
+  var h2Count=(content.match(/^##\s/gm)||[]).length;
+  if(h2Count>=3)s+=4;if(h2Count>=5)s+=3;
+  if(item.tags?.length>0)s+=4;if(item.tags?.length>3)s+=3;
+  if((item.metaDescription||item.metaDesc||'').length>50)s+=5;
+  if((item.metaTitle||item.seoTitle||'').length>10)s+=4;
+  if(item.keyword)s+=6;
+  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=5;
+  // Readability bonus
+  var fk=fleschKincaid(content);
+  if(fk.ease>=60)s+=5;if(fk.ease>=70)s+=3;
+  if(fk.avgWordsPerSentence<=20)s+=3;
+  // Link bonus
+  var linkCount=((content).match(/\[.*?\]\(.*?\)/g)||[]).length+((content).match(/<a\s/gi)||[]).length;
+  if(linkCount>=2)s+=3;if(linkCount>=5)s+=2;
+  // Store readability on item for display
+  item._readability=fk;
   return Math.min(98,Math.max(0,s));
 }
 function heuristicSEOScore(item){
-  let s=15;
-  const mt=(item.metaTitle||item.seoTitle||'');
-  const md=(item.metaDescription||item.metaDesc||'');
-  if(mt.length>=10&&mt.length<=60)s+=18;else if(mt.length>0)s+=8;
-  if(md.length>=50&&md.length<=155)s+=18;else if(md.length>0)s+=8;
-  if(item.keyword)s+=12;
-  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=10;
+  var s=10;
+  var mt=(item.metaTitle||item.seoTitle||'');
+  var md=(item.metaDescription||item.metaDesc||'');
+  if(mt.length>=10&&mt.length<=60)s+=15;else if(mt.length>0)s+=6;
+  if(md.length>=50&&md.length<=155)s+=15;else if(md.length>0)s+=6;
+  if(item.keyword)s+=10;
+  if(item.keyword&&item.title?.toLowerCase().includes(item.keyword.toLowerCase()))s+=8;
   if(item.slug)s+=5;
-  if((item.content||'').includes('## ')||/<h2/i.test(item.content||''))s+=8;
-  const wc=item.wordCount||(item.content||'').split(/\s+/).filter(Boolean).length;
-  if(wc>500)s+=7;if(wc>1000)s+=7;
+  var content=item.content||'';
+  if(content.includes('## ')||/<h2/i.test(content))s+=7;
+  var wc=item.wordCount||(content).split(/\s+/).filter(Boolean).length;
+  if(wc>500)s+=6;if(wc>1000)s+=5;if(wc>1500)s+=3;
+  // Keyword in first 100 words
+  if(item.keyword){var first100=(content).split(/\s+/).slice(0,100).join(' ').toLowerCase();if(first100.includes(item.keyword.toLowerCase()))s+=5;}
+  // Internal links
+  var linkCount=((content).match(/\[.*?\]\(.*?\)/g)||[]).length;
+  if(linkCount>=1)s+=4;if(linkCount>=3)s+=3;
+  // Image alt text
+  if(((content).match(/alt=["'][^"']+["']/g)||[]).length>0)s+=3;
+  // Readability factor
+  var fk=fleschKincaid(content);
+  if(fk.ease>=50)s+=3;
   return Math.min(98,Math.max(0,s));
+}
+
+// Auto-generate JSON-LD schema for content items
+function generateSchema(item){
+  var domain=S.settings.siteDomain||'getconduit.io';
+  var schema={"@context":"https://schema.org","@type":"Article","headline":item.title,"description":item.metaDescription||item.metaDesc||item.title,"author":{"@type":"Person","name":item.author||'Admin'},"datePublished":item.publishDate||new Date(item.created||Date.now()).toISOString(),"dateModified":new Date(item.updated||Date.now()).toISOString(),"publisher":{"@type":"Organization","name":S.siteName||'Conduit'},"mainEntityOfPage":{"@type":"WebPage","@id":"https://"+domain+"/"+(item.slug||'')},"wordCount":item.wordCount||0};
+  if(item.tags?.length)schema.keywords=item.tags.join(', ');
+  if(item.featuredImage||item.ogImage)schema.image=item.featuredImage||item.ogImage;
+  // FAQ schema if content has Q&A patterns
+  var faqs=[];
+  var faqMatches=(item.content||'').match(/(?:^|\n)(?:#+\s*)?(?:Q:|FAQ:|Question:)\s*(.+?)(?:\n)(?:A:|Answer:)\s*(.+?)(?:\n|$)/gi);
+  if(!faqMatches){
+    var qaPairs=(item.content||'').match(/(?:^|\n)(?:###?\s+)(.+\?)\s*\n([^#\n][^\n]+)/g);
+    if(qaPairs)qaPairs.forEach(function(qa){var parts=qa.trim().split('\n');if(parts.length>=2)faqs.push({"@type":"Question","name":parts[0].replace(/^#+\s*/,''),"acceptedAnswer":{"@type":"Answer","text":parts.slice(1).join(' ').trim()}});});
+  }
+  var result=[schema];
+  if(faqs.length>=2)result.push({"@context":"https://schema.org","@type":"FAQPage","mainEntity":faqs.slice(0,10)});
+  return result;
 }
 async function scoreSEO(item){
   if(!item.content||item.content.length<200)return;

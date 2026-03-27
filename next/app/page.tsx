@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
@@ -21,10 +22,10 @@ const AGENTS = [
 ];
 
 const PRICING = [
-  { plan: 'Free', price: '$0', period: '/forever', calls: '100 AI calls/mo', features: ['5 articles', '1 team member', 'Basic agents', 'Community support'], cta: 'Start Free', highlight: false, byok: false },
-  { plan: 'Pro', price: '$29', period: '/month', calls: '1,000 AI calls/mo', features: ['Unlimited articles', '5 team members', 'Full agent suite', 'Priority support', 'API access', 'Version history'], cta: 'Start Pro', highlight: true, byok: false },
-  { plan: 'Business', price: '$99', period: '/month', calls: '10,000 AI calls/mo', features: ['Unlimited everything', '15 team members', 'White-label', 'Dedicated support', 'Custom integrations', 'SSO'], cta: 'Start Business', highlight: false, byok: false },
-  { plan: 'BYOK', price: '$0', period: '/forever', calls: 'Unlimited (your keys)', features: ['Bring your own API keys', 'Unlimited AI calls', 'All features unlocked', 'Self-serve setup'], cta: 'Get Started', highlight: false, byok: true },
+  { plan: 'Free', price: 0, period: '/forever', calls: '100 AI calls/month', features: ['5 articles', 'Core agents', 'Email support', 'Community access'], cta: 'Start Free', highlight: false, byok: false },
+  { plan: 'Pro', price: 29, period: '/month', calls: '1,000 AI calls/month', features: ['Unlimited articles', 'All agents + autopilot', 'Priority support', 'API access', 'Version history', 'GSC integration'], cta: 'Start Pro', highlight: true, byok: false },
+  { plan: 'Business', price: 99, period: '/month', calls: '10,000 AI calls/month', features: ['Unlimited everything', 'White-label', 'SSO & SAML', 'Dedicated support', 'Custom integrations', 'SLA guarantee'], cta: 'Start Business', highlight: false, byok: false },
+  { plan: 'BYOK', price: 0, period: '/forever', calls: 'Unlimited (your API keys)', features: ['All Pro features', '5 providers supported', 'Zero platform fees', 'Self-serve forever'], cta: 'Get Started', highlight: false, byok: true },
 ];
 
 const FAQ = [
@@ -240,6 +241,7 @@ function DashboardPreview() {
 export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<string>('solo');
+  const [annual, setAnnual] = useState(false);
 
   /* scroll-reveal refs for each section */
   const r1 = useReveal(); const r2 = useReveal(); const r3 = useReveal();
@@ -292,9 +294,12 @@ export default function LandingPage() {
             <a href="#pricing" onClick={smoothScroll('pricing')} className="text-slate-400 hover:text-white transition-colors">Pricing</a>
             <a href="#faq" onClick={smoothScroll('faq')} className="text-slate-400 hover:text-white transition-colors">FAQ</a>
           </div>
-          <Link href="/dashboard">
-            <Button size="sm" className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-shadow border-0">Open App</Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Link href="/dashboard">
+              <Button size="sm" className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-shadow border-0">Open App</Button>
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -549,53 +554,121 @@ const articles = `}<span className="text-blue-400">await</span>{` client.getCont
       </section>
 
       {/* ========== 8. PRICING ========== */}
-      <section id="pricing" className="py-24 px-6">
-        <div ref={r7.ref} className={`reveal-base ${r7.cls} max-w-6xl mx-auto`}>
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-black mb-3">Start free. Scale when ready.</h2>
-            <p className="text-slate-400 text-lg">No surprises. Cancel anytime.</p>
+      <section id="pricing" className="py-24 px-6 relative">
+        {/* Background glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-blue-600/8 rounded-full blur-[120px] pointer-events-none" />
+
+        <div ref={r7.ref} className={`reveal-base ${r7.cls} max-w-6xl mx-auto relative z-10`}>
+          <div className="text-center mb-14">
+            <h2 className="text-3xl sm:text-4xl font-black mb-3">Simple, transparent pricing</h2>
+            <p className="text-slate-400 text-lg">Start free. Scale when ready.</p>
+
+            {/* Annual / Monthly toggle */}
+            <div className="flex items-center justify-center gap-3 mt-8">
+              <span className={`text-sm font-medium transition-colors ${!annual ? 'text-white' : 'text-slate-500'}`}>Monthly</span>
+              <button
+                onClick={() => setAnnual(!annual)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${annual ? 'bg-blue-600' : 'bg-slate-700'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform shadow-sm ${annual ? 'translate-x-6' : 'translate-x-0'}`} />
+              </button>
+              <span className={`text-sm font-medium transition-colors ${annual ? 'text-white' : 'text-slate-500'}`}>Annual</span>
+              <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[10px] px-2 py-0.5">Save 20%</Badge>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {PRICING.map(p => (
-              <div key={p.plan}
-                className={`relative rounded-xl p-6 transition-all ${
-                  p.highlight
-                    ? 'bg-gradient-to-b from-blue-500/10 to-[#0f172a] border-2 border-blue-500/40 shadow-xl shadow-blue-500/10 lg:-mt-4 lg:mb-4 lg:py-8'
-                    : p.byok
-                      ? 'bg-[#0f172a]/40 border-2 border-dashed border-slate-700/50'
-                      : 'bg-[#0f172a]/60 border border-slate-800/50'
-                }`}>
-                {p.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-blue-600 text-white text-[10px] px-3 shadow-lg shadow-blue-600/30 border-0">MOST POPULAR</Badge>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
+            {PRICING.map(p => {
+              const monthlyPrice = p.price;
+              const annualPrice = Math.round(p.price * 0.8);
+              const displayPrice = p.price === 0 ? 0 : (annual ? annualPrice : monthlyPrice);
+              const showAnnualSavings = !annual && p.price > 0;
+
+              return (
+                <div key={p.plan}
+                  className={`group relative rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 ${
+                    p.highlight
+                      ? 'bg-slate-900/60 backdrop-blur-sm border-2 border-blue-500/40 shadow-xl shadow-blue-500/10 lg:-mt-4 lg:pb-8 lg:pt-8'
+                      : p.byok
+                        ? 'bg-slate-900/60 backdrop-blur-sm border-2 border-dashed border-slate-600/50 hover:border-slate-500/60'
+                        : 'bg-slate-900/60 backdrop-blur-sm border border-slate-800/60 hover:border-slate-700/80'
+                  }`}
+                  style={p.highlight ? { boxShadow: '0 0 40px rgba(59,130,246,0.1), 0 4px 30px rgba(59,130,246,0.08)' } : undefined}
+                >
+                  {/* Most Popular badge */}
+                  {p.highlight && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-gradient-to-r from-blue-600 to-blue-500 text-white text-[10px] px-4 py-0.5 shadow-lg shadow-blue-600/30 border-0 font-semibold tracking-wide">Most Popular</Badge>
+                    </div>
+                  )}
+                  {/* Power Users badge */}
+                  {p.byok && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge variant="outline" className="text-slate-300 border-slate-600 bg-slate-800 text-[10px] px-4 py-0.5 font-semibold tracking-wide">Power Users</Badge>
+                    </div>
+                  )}
+
+                  <h3 className="font-bold text-lg text-white">{p.plan}</h3>
+
+                  {/* Price */}
+                  <div className="mt-4 mb-1 flex items-baseline gap-1.5">
+                    <span className="text-5xl font-black tracking-tight text-white">${displayPrice}</span>
+                    <span className="text-slate-500 text-sm">{p.price === 0 ? '/forever' : (annual ? '/mo, billed yearly' : '/month')}</span>
                   </div>
-                )}
-                {p.byok && <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Power Users</p>}
 
-                <h3 className="font-bold text-lg">{p.plan}</h3>
-                <div className="mt-2 mb-1">
-                  <span className="text-3xl font-black">{p.price}</span>
-                  <span className="text-slate-500 text-sm">{p.period}</span>
+                  {/* Annual savings hint */}
+                  {showAnnualSavings && (
+                    <p className="text-xs text-slate-500 mb-4">
+                      <span className="line-through">${monthlyPrice}</span>{' '}
+                      <span className="text-emerald-400">${annualPrice}/mo with annual</span>
+                    </p>
+                  )}
+                  {!showAnnualSavings && <div className="mb-4" />}
+
+                  {/* AI calls badge */}
+                  <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium mb-6 ${
+                    p.highlight
+                      ? 'bg-blue-500/15 text-blue-300 border border-blue-500/20'
+                      : p.byok
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-slate-800/80 text-slate-400 border border-slate-700/50'
+                  }`}>
+                    <span>{'\u2726'}</span>
+                    {p.calls}
+                  </div>
+
+                  {/* Features */}
+                  <ul className="space-y-3 mb-8">
+                    {p.features.map(f => (
+                      <li key={f} className="text-sm text-slate-300 flex items-start gap-2.5">
+                        <span className="text-blue-400 text-sm mt-0.5 shrink-0">{'\u2713'}</span>
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* CTA */}
+                  <Link href="/dashboard" className="block mt-auto">
+                    <Button
+                      variant={p.highlight ? 'default' : 'outline'}
+                      className={`w-full font-semibold transition-all ${
+                        p.highlight
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 border-0'
+                          : p.byok
+                            ? 'border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white hover:border-slate-500'
+                            : 'border-slate-700 text-slate-300 hover:bg-slate-800/80 hover:text-white hover:border-slate-600'
+                      }`}
+                      size="sm"
+                    >
+                      {p.cta}
+                    </Button>
+                  </Link>
                 </div>
-                <p className="text-xs text-slate-400 mb-5">{p.calls}</p>
-
-                <ul className="space-y-2.5 mb-6">
-                  {p.features.map(f => (
-                    <li key={f} className="text-sm text-slate-300 flex items-center gap-2">
-                      <span className="text-emerald-400 text-xs">{'\u2713'}</span>{f}
-                    </li>
-                  ))}
-                </ul>
-
-                <Link href="/dashboard" className="block">
-                  <Button variant={p.highlight ? 'default' : 'outline'} className={`w-full ${p.highlight ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/20 border-0' : ''}`} size="sm">{p.cta}</Button>
-                </Link>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          <p className="text-center text-xs text-slate-500 mt-10">All plans include: Unlimited collections &bull; Version history &bull; REST API &bull; 5 AI providers</p>
+          <p className="text-center text-sm text-slate-500 mt-12">All plans include: Supabase auth &bull; 5 AI providers &bull; Headless CMS API</p>
         </div>
       </section>
 

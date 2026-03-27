@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import Link from 'next/link';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 function buildBreadcrumb(pathname: string | null): { label: string; href: string }[] {
   if (!pathname) return [{ label: 'Dashboard', href: '/dashboard' }];
@@ -86,6 +87,9 @@ export function Topbar() {
       <Link href="/editor/new">
         <Button size="sm" className="text-xs bg-blue-600 hover:bg-blue-500 text-white border-0">+ New Content</Button>
       </Link>
+
+      {/* Theme Toggle */}
+      <ThemeToggle />
 
       {/* User Avatar */}
       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-xs font-bold cursor-pointer hover:shadow-lg hover:shadow-blue-500/20 transition-shadow">

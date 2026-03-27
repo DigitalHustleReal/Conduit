@@ -1,4 +1,4 @@
-import { supabase } from './client';
+import { getSupabase } from './client';
 import type { ContentItem, Collection, Keyword, PipelineItem, MediaItem } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -14,15 +14,16 @@ export interface WorkspaceData {
 }
 
 export async function loadWorkspaceData(workspaceId: string): Promise<WorkspaceData | null> {
-  if (!supabase) return null;
+  const sb = getSupabase();
+  if (!sb) return null;
 
   try {
     const [contentRes, collectionsRes, keywordsRes, mediaRes, pipelineRes] = await Promise.all([
-      supabase.from('content').select('*').eq('workspace_id', workspaceId),
-      supabase.from('collections').select('*').eq('workspace_id', workspaceId),
-      supabase.from('keywords').select('*').eq('workspace_id', workspaceId),
-      supabase.from('media').select('*').eq('workspace_id', workspaceId),
-      supabase.from('pipeline').select('*').eq('workspace_id', workspaceId),
+      sb.from('content').select('*').eq('workspace_id', workspaceId),
+      sb.from('collections').select('*').eq('workspace_id', workspaceId),
+      sb.from('keywords').select('*').eq('workspace_id', workspaceId),
+      sb.from('media').select('*').eq('workspace_id', workspaceId),
+      sb.from('pipeline').select('*').eq('workspace_id', workspaceId),
     ]);
 
     return {
@@ -43,10 +44,10 @@ export async function loadWorkspaceData(workspaceId: string): Promise<WorkspaceD
 // ---------------------------------------------------------------------------
 
 export async function syncContent(workspaceId: string, items: ContentItem[]): Promise<void> {
-  if (!supabase || items.length === 0) return;
+  const sb = getSupabase(); if (!sb || items.length === 0) return;
   try {
     const rows = items.map((item) => mapContentToDB(workspaceId, item));
-    const { error } = await supabase.from('content').upsert(rows, { onConflict: 'id' });
+    const { error } = await sb.from('content').upsert(rows, { onConflict: 'id' });
     if (error) console.warn('[sync] syncContent error:', error.message);
   } catch (err) {
     console.warn('[sync] syncContent failed:', err);
@@ -54,10 +55,10 @@ export async function syncContent(workspaceId: string, items: ContentItem[]): Pr
 }
 
 export async function syncKeywords(workspaceId: string, items: Keyword[]): Promise<void> {
-  if (!supabase || items.length === 0) return;
+  const sb = getSupabase(); if (!sb || items.length === 0) return;
   try {
     const rows = items.map((item) => mapKeywordToDB(workspaceId, item));
-    const { error } = await supabase.from('keywords').upsert(rows, { onConflict: 'id' });
+    const { error } = await sb.from('keywords').upsert(rows, { onConflict: 'id' });
     if (error) console.warn('[sync] syncKeywords error:', error.message);
   } catch (err) {
     console.warn('[sync] syncKeywords failed:', err);
@@ -65,10 +66,10 @@ export async function syncKeywords(workspaceId: string, items: Keyword[]): Promi
 }
 
 export async function syncCollections(workspaceId: string, items: Collection[]): Promise<void> {
-  if (!supabase || items.length === 0) return;
+  const sb = getSupabase(); if (!sb || items.length === 0) return;
   try {
     const rows = items.map((item) => mapCollectionToDB(workspaceId, item));
-    const { error } = await supabase.from('collections').upsert(rows, { onConflict: 'id' });
+    const { error } = await sb.from('collections').upsert(rows, { onConflict: 'id' });
     if (error) console.warn('[sync] syncCollections error:', error.message);
   } catch (err) {
     console.warn('[sync] syncCollections failed:', err);
@@ -76,10 +77,10 @@ export async function syncCollections(workspaceId: string, items: Collection[]):
 }
 
 export async function syncMedia(workspaceId: string, items: MediaItem[]): Promise<void> {
-  if (!supabase || items.length === 0) return;
+  const sb = getSupabase(); if (!sb || items.length === 0) return;
   try {
     const rows = items.map((item) => mapMediaToDB(workspaceId, item));
-    const { error } = await supabase.from('media').upsert(rows, { onConflict: 'id' });
+    const { error } = await sb.from('media').upsert(rows, { onConflict: 'id' });
     if (error) console.warn('[sync] syncMedia error:', error.message);
   } catch (err) {
     console.warn('[sync] syncMedia failed:', err);
@@ -87,10 +88,10 @@ export async function syncMedia(workspaceId: string, items: MediaItem[]): Promis
 }
 
 export async function syncPipeline(workspaceId: string, items: PipelineItem[]): Promise<void> {
-  if (!supabase || items.length === 0) return;
+  const sb = getSupabase(); if (!sb || items.length === 0) return;
   try {
     const rows = items.map((item) => mapPipelineToDB(workspaceId, item));
-    const { error } = await supabase.from('pipeline').upsert(rows, { onConflict: 'id' });
+    const { error } = await sb.from('pipeline').upsert(rows, { onConflict: 'id' });
     if (error) console.warn('[sync] syncPipeline error:', error.message);
   } catch (err) {
     console.warn('[sync] syncPipeline failed:', err);
@@ -98,9 +99,9 @@ export async function syncPipeline(workspaceId: string, items: PipelineItem[]): 
 }
 
 export async function deleteItem(table: string, id: number | string): Promise<void> {
-  if (!supabase) return;
+  const sb = getSupabase(); if (!sb) return;
   try {
-    const { error } = await supabase.from(table).delete().eq('id', id);
+    const { error } = await sb.from(table).delete().eq('id', id);
     if (error) console.warn(`[sync] deleteItem(${table}) error:`, error.message);
   } catch (err) {
     console.warn(`[sync] deleteItem(${table}) failed:`, err);
@@ -117,9 +118,9 @@ export async function logAudit(
   action: string,
   details: Record<string, unknown> = {},
 ): Promise<void> {
-  if (!supabase) return;
+  const sb = getSupabase(); if (!sb) return;
   try {
-    const { error } = await supabase.from('audit_log').insert({
+    const { error } = await sb.from('audit_log').insert({
       workspace_id: workspaceId,
       user_id: userId,
       action,
@@ -136,9 +137,9 @@ export async function trackEvent(
   eventType: string,
   data: Record<string, unknown> = {},
 ): Promise<void> {
-  if (!supabase) return;
+  const sb = getSupabase(); if (!sb) return;
   try {
-    const { error } = await supabase.from('analytics_events').insert({
+    const { error } = await sb.from('analytics_events').insert({
       workspace_id: workspaceId,
       event_type: eventType,
       data,

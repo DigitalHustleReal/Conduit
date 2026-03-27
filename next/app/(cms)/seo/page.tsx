@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '@/stores/workspace';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { isGSCConnected, fetchGSCData, dateRangeFromLabel } from '@/lib/gsc';
+import type { GSCQuery } from '@/lib/gsc';
 
 function scoreColor(score: number) {
   if (score >= 80) return 'text-green-600';
@@ -18,13 +20,13 @@ function scoreBg(score: number) {
   return '#ef4444';
 }
 
-const TREND_ICON: Record<string, string> = { up: '↑', down: '↓', stable: '→' };
+const TREND_ICON: Record<string, string> = { up: '\u2191', down: '\u2193', stable: '\u2192' };
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   tracked: 'secondary', top5: 'default', top10: 'default', top20: 'outline', opportunity: 'secondary', lost: 'destructive',
 };
 
 export default function SEOCenterPage() {
-  const { content, keywords } = useWorkspace();
+  const { content, keywords, settings } = useWorkspace();
 
   const published = useMemo(() => content.filter((c) => c.status === 'published'), [content]);
   const avgSeo = useMemo(() => {
@@ -37,6 +39,53 @@ export default function SEOCenterPage() {
   }, [content]);
 
   const lowSeo = useMemo(() => content.filter((c) => c.seoScore < 60).sort((a, b) => a.seoScore - b.seoScore), [content]);
+
+  // ── GSC State ──
+  const gscConnected = isGSCConnected(settings);
+  const [gscQueryMap, setGscQueryMap] = useState<Record<string, GSCQuery>>({});
+  const [gscContentMap, setGscContentMap] = useState<Record<string, { clicks: number; impressions: number; ctr: number; position: number }>>({});
+  const [gscSyncing, setGscSyncing] = useState(false);
+  const [gscSynced, setGscSynced] = useState(false);
+
+  const syncFromGSC = useCallback(async () => {
+    if (!settings.gscSiteUrl || !settings.gscRefreshToken) return;
+    setGscSyncing(true);
+    try {
+      const range = dateRangeFromLabel('28d');
+      const [queryRes, pageRes] = await Promise.all([
+        fetchGSCData(settings.gscSiteUrl, range, ['query'], settings.gscRefreshToken),
+        fetchGSCData(settings.gscSiteUrl, range, ['page'], settings.gscRefreshToken),
+      ]);
+
+      // Build lookup map: keyword -> GSC data
+      const qMap: Record<string, GSCQuery> = {};
+      for (const row of queryRes.rows as GSCQuery[]) {
+        qMap[row.query.toLowerCase()] = row;
+      }
+      setGscQueryMap(qMap);
+
+      // Build lookup map: page URL path -> GSC data
+      const pMap: Record<string, { clicks: number; impressions: number; ctr: number; position: number }> = {};
+      for (const row of pageRes.rows as unknown as Array<Record<string, unknown>>) {
+        const pageUrl = String(row.page ?? '');
+        const path = pageUrl.replace(/^https?:\/\/[^/]+/, '');
+        pMap[path] = { clicks: Number(row.clicks), impressions: Number(row.impressions), ctr: Number(row.ctr), position: Number(row.position) };
+      }
+      setGscContentMap(pMap);
+      setGscSynced(true);
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setGscSyncing(false);
+    }
+  }, [settings.gscSiteUrl, settings.gscRefreshToken]);
+
+  // Auto-sync on mount if connected
+  useEffect(() => {
+    if (gscConnected && !gscSynced) {
+      syncFromGSC();
+    }
+  }, [gscConnected, gscSynced, syncFromGSC]);
 
   return (
     <div>
@@ -83,6 +132,13 @@ export default function SEOCenterPage() {
       <div className="flex gap-3 mb-6">
         <Button variant="outline">Run SEO Audit</Button>
         <Button variant="outline">Fix All Issues</Button>
+        {gscConnected ? (
+          <Button variant="outline" onClick={syncFromGSC} disabled={gscSyncing}>
+            {gscSyncing ? 'Syncing...' : 'Sync from GSC'}
+          </Button>
+        ) : (
+          <a href="/api/gsc/auth" className={buttonVariants({ variant: 'outline' })}>Connect Search Console</a>
+        )}
       </div>
 
       {/* Content Health */}
@@ -98,18 +154,24 @@ export default function SEOCenterPage() {
                   <th className="pb-2 pr-4">Title</th>
                   <th className="pb-2 pr-4">SEO</th>
                   <th className="pb-2 pr-4">AI</th>
-                  <th className="pb-2">Status</th>
+                  <th className="pb-2 pr-4">Status</th>
+                  {gscSynced && <th className="pb-2 pr-4">CTR</th>}
                 </tr>
               </thead>
               <tbody>
-                {lowSeo.map((item) => (
-                  <tr key={item.id} className="border-b last:border-0 bg-red-500/5">
-                    <td className="py-2 pr-4 font-medium">{item.title || 'Untitled'}</td>
-                    <td className={`py-2 pr-4 font-mono font-bold ${scoreColor(item.seoScore)}`}>{item.seoScore}</td>
-                    <td className={`py-2 pr-4 font-mono ${scoreColor(item.aiScore)}`}>{item.aiScore}</td>
-                    <td className="py-2"><Badge variant="secondary">{item.status}</Badge></td>
-                  </tr>
-                ))}
+                {lowSeo.map((item) => {
+                  const slug = item.slug ? `/${item.slug}` : '';
+                  const gscData = slug ? gscContentMap[slug] : undefined;
+                  return (
+                    <tr key={item.id} className="border-b last:border-0 bg-red-500/5">
+                      <td className="py-2 pr-4 font-medium">{item.title || 'Untitled'}</td>
+                      <td className={`py-2 pr-4 font-mono font-bold ${scoreColor(item.seoScore)}`}>{item.seoScore}</td>
+                      <td className={`py-2 pr-4 font-mono ${scoreColor(item.aiScore)}`}>{item.aiScore}</td>
+                      <td className="py-2 pr-4"><Badge variant="secondary">{item.status}</Badge></td>
+                      {gscSynced && <td className="py-2 pr-4 font-mono text-xs">{gscData ? `${gscData.ctr}%` : '-'}</td>}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -130,32 +192,46 @@ export default function SEOCenterPage() {
                   <th className="pb-2 pr-4">Volume</th>
                   <th className="pb-2 pr-4">Difficulty</th>
                   <th className="pb-2 pr-4">Position</th>
+                  {gscSynced && <th className="pb-2 pr-4">GSC Pos</th>}
                   <th className="pb-2 pr-4">Status</th>
                   <th className="pb-2">Trend</th>
                 </tr>
               </thead>
               <tbody>
-                {keywords.map((kw) => (
-                  <tr key={kw.id} className="border-b last:border-0">
-                    <td className="py-2 pr-4 font-medium">{kw.keyword || kw.term}</td>
-                    <td className="py-2 pr-4 font-mono">{kw.volume?.toLocaleString() || '-'}</td>
-                    <td className="py-2 pr-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-muted rounded-full h-2">
-                          <div className="h-2 rounded-full" style={{ width: `${kw.difficulty}%`, backgroundColor: scoreBg(100 - kw.difficulty) }} />
+                {keywords.map((kw) => {
+                  const kwText = (kw.keyword || kw.term || '').toLowerCase();
+                  const gscData = gscQueryMap[kwText];
+                  return (
+                    <tr key={kw.id} className="border-b last:border-0">
+                      <td className="py-2 pr-4 font-medium">{kw.keyword || kw.term}</td>
+                      <td className="py-2 pr-4 font-mono">{kw.volume?.toLocaleString() || '-'}</td>
+                      <td className="py-2 pr-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-muted rounded-full h-2">
+                            <div className="h-2 rounded-full" style={{ width: `${kw.difficulty}%`, backgroundColor: scoreBg(100 - kw.difficulty) }} />
+                          </div>
+                          <span className="font-mono text-xs">{kw.difficulty}</span>
                         </div>
-                        <span className="font-mono text-xs">{kw.difficulty}</span>
-                      </div>
-                    </td>
-                    <td className="py-2 pr-4 font-mono">{kw.position || kw.pos || '-'}</td>
-                    <td className="py-2 pr-4"><Badge variant={STATUS_VARIANT[kw.status] || 'secondary'}>{kw.status}</Badge></td>
-                    <td className="py-2">
-                      <span className={kw.trend === 'up' ? 'text-green-600' : kw.trend === 'down' ? 'text-red-500' : 'text-muted-foreground'}>
-                        {TREND_ICON[kw.trend || 'stable'] || '→'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-2 pr-4 font-mono">{kw.position || kw.pos || '-'}</td>
+                      {gscSynced && (
+                        <td className="py-2 pr-4 font-mono">
+                          {gscData ? (
+                            <span className={gscData.position <= 10 ? 'text-green-600 font-bold' : gscData.position <= 20 ? 'text-yellow-600' : 'text-muted-foreground'}>
+                              {gscData.position}
+                            </span>
+                          ) : '-'}
+                        </td>
+                      )}
+                      <td className="py-2 pr-4"><Badge variant={STATUS_VARIANT[kw.status] || 'secondary'}>{kw.status}</Badge></td>
+                      <td className="py-2">
+                        <span className={kw.trend === 'up' ? 'text-green-600' : kw.trend === 'down' ? 'text-red-500' : 'text-muted-foreground'}>
+                          {TREND_ICON[kw.trend || 'stable'] || '\u2192'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

@@ -5,10 +5,22 @@ import { persist } from 'zustand/middleware';
 import type { ContentItem, Collection, Keyword, PipelineItem, MediaItem } from '@/types/content';
 import type { Credits, TeamMember, WorkspaceSettings, QualityGate, Automation, AutopilotConfig } from '@/types/workspace';
 import type { AgentState, AgentFeedbackEntry } from '@/types/agent';
+import {
+  loadWorkspaceData,
+  syncContent,
+  syncKeywords,
+  syncCollections,
+  syncMedia,
+  syncPipeline,
+  deleteItem,
+  logAudit,
+} from '@/lib/supabase/sync';
 
 interface WorkspaceStore {
   // Core
   workspaceId: string | null;
+  userId: string | null;
+  isAuthenticated: boolean;
   siteName: string;
   pricingPlan: 'free' | 'pro' | 'business';
   credits: Credits;
@@ -39,6 +51,7 @@ interface WorkspaceStore {
   analyticsEvents: Array<{ id: number; type: string; contentId?: string; ts: number; meta?: Record<string, unknown> }>;
 
   // Actions
+  setAuth: (userId: string | null, isAuthenticated: boolean) => void;
   setWorkspace: (id: string, name: string) => void;
   setPlan: (plan: 'free' | 'pro' | 'business') => void;
   setContent: (content: ContentItem[]) => void;
@@ -46,14 +59,26 @@ interface WorkspaceStore {
   updateContentItem: (id: number, updates: Partial<ContentItem>) => void;
   deleteContent: (id: number) => void;
   setKeywords: (keywords: Keyword[]) => void;
+  addKeyword: (item: Keyword) => void;
+  removeKeyword: (id: number) => void;
+  setCollections: (collections: Collection[]) => void;
+  addCollection: (item: Collection) => void;
+  removeCollection: (id: number) => void;
   setMedia: (media: MediaItem[]) => void;
+  addMedia: (item: MediaItem) => void;
+  removeMedia: (id: number) => void;
   setPipeline: (pipeline: PipelineItem[]) => void;
+  addPipelineItem: (item: PipelineItem) => void;
+  removePipelineItem: (id: number) => void;
   setSettings: (settings: Partial<WorkspaceSettings>) => void;
   setCredits: (credits: Partial<Credits>) => void;
   deductCredit: (type?: keyof Credits) => boolean;
   setAutopilot: (config: Partial<AutopilotConfig>) => void;
   addAgentFeedback: (entry: AgentFeedbackEntry) => void;
   logAgentRun: (agentId: string, action: string, result: unknown, credits: number) => void;
+
+  // Supabase sync
+  loadFromSupabase: (workspaceId: string) => Promise<void>;
 }
 
 const DEFAULT_CREDITS: Credits = {
@@ -86,10 +111,20 @@ export const PLAN_LIMITS = {
   business: { aiCalls: 10000, storage: 102400, apiReqs: 100000, seats: 15, socialPosts: 1000 },
 };
 
+// ---------------------------------------------------------------------------
+// Async sync helper — fire-and-forget, never blocks Zustand
+// ---------------------------------------------------------------------------
+
+function bgSync(fn: () => Promise<void>): void {
+  fn().catch((err) => console.warn('[store] background sync error:', err));
+}
+
 export const useWorkspace = create<WorkspaceStore>()(
   persist(
     (set, get) => ({
       workspaceId: null,
+      userId: null,
+      isAuthenticated: false,
       siteName: 'Your Site',
       pricingPlan: 'free',
       credits: DEFAULT_CREDITS,
@@ -121,18 +156,124 @@ export const useWorkspace = create<WorkspaceStore>()(
       contentHistory: {},
       analyticsEvents: [],
 
+      // -----------------------------------------------------------------------
       // Actions
+      // -----------------------------------------------------------------------
+
+      setAuth: (userId, isAuthenticated) => set({ userId, isAuthenticated }),
+
       setWorkspace: (id, name) => set({ workspaceId: id, siteName: name }),
+
       setPlan: (plan) => set({ pricingPlan: plan }),
-      setContent: (content) => set({ content }),
-      addContent: (item) => set((s) => ({ content: [...s.content, item] })),
-      updateContentItem: (id, updates) => set((s) => ({
-        content: s.content.map((c) => c.id === id ? { ...c, ...updates, updated: Date.now() } : c),
-      })),
-      deleteContent: (id) => set((s) => ({ content: s.content.filter((c) => c.id !== id) })),
-      setKeywords: (keywords) => set({ keywords }),
-      setMedia: (media) => set({ media }),
-      setPipeline: (pipeline) => set({ pipeline }),
+
+      setContent: (content) => {
+        set({ content });
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => syncContent(wsId, content));
+      },
+
+      addContent: (item) => {
+        set((s) => ({ content: [...s.content, item] }));
+        const wsId = get().workspaceId;
+        if (wsId) {
+          bgSync(() => syncContent(wsId, [item]));
+          bgSync(() => logAudit(wsId, get().userId ?? '', 'content.create', { title: item.title }));
+        }
+      },
+
+      updateContentItem: (id, updates) => {
+        set((s) => ({
+          content: s.content.map((c) => c.id === id ? { ...c, ...updates, updated: Date.now() } : c),
+        }));
+        const state = get();
+        const wsId = state.workspaceId;
+        if (wsId) {
+          const updated = state.content.find((c) => c.id === id);
+          if (updated) bgSync(() => syncContent(wsId, [updated]));
+        }
+      },
+
+      deleteContent: (id) => {
+        set((s) => ({ content: s.content.filter((c) => c.id !== id) }));
+        const wsId = get().workspaceId;
+        if (wsId) {
+          bgSync(() => deleteItem('content', id));
+          bgSync(() => logAudit(wsId, get().userId ?? '', 'content.delete', { contentId: id }));
+        }
+      },
+
+      setKeywords: (keywords) => {
+        set({ keywords });
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => syncKeywords(wsId, keywords));
+      },
+
+      addKeyword: (item) => {
+        set((s) => ({ keywords: [...s.keywords, item] }));
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => syncKeywords(wsId, [item]));
+      },
+
+      removeKeyword: (id) => {
+        set((s) => ({ keywords: s.keywords.filter((k) => k.id !== id) }));
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => deleteItem('keywords', id));
+      },
+
+      setCollections: (collections) => {
+        set({ collections });
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => syncCollections(wsId, collections));
+      },
+
+      addCollection: (item) => {
+        set((s) => ({ collections: [...s.collections, item] }));
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => syncCollections(wsId, [item]));
+      },
+
+      removeCollection: (id) => {
+        set((s) => ({ collections: s.collections.filter((c) => c.id !== id) }));
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => deleteItem('collections', id));
+      },
+
+      setMedia: (media) => {
+        set({ media });
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => syncMedia(wsId, media));
+      },
+
+      addMedia: (item) => {
+        set((s) => ({ media: [...s.media, item] }));
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => syncMedia(wsId, [item]));
+      },
+
+      removeMedia: (id) => {
+        set((s) => ({ media: s.media.filter((m) => m.id !== id) }));
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => deleteItem('media', id));
+      },
+
+      setPipeline: (pipeline) => {
+        set({ pipeline });
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => syncPipeline(wsId, pipeline));
+      },
+
+      addPipelineItem: (item) => {
+        set((s) => ({ pipeline: [...s.pipeline, item] }));
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => syncPipeline(wsId, [item]));
+      },
+
+      removePipelineItem: (id) => {
+        set((s) => ({ pipeline: s.pipeline.filter((p) => p.id !== id) }));
+        const wsId = get().workspaceId;
+        if (wsId) bgSync(() => deleteItem('pipeline', id));
+      },
+
       setSettings: (updates) => set((s) => ({ settings: { ...s.settings, ...updates } })),
       setCredits: (updates) => set((s) => ({ credits: { ...s.credits, ...updates } })),
 
@@ -167,11 +308,31 @@ export const useWorkspace = create<WorkspaceStore>()(
           ].slice(0, 500),
         },
       })),
+
+      // -----------------------------------------------------------------------
+      // Supabase full load
+      // -----------------------------------------------------------------------
+
+      loadFromSupabase: async (workspaceId: string) => {
+        const data = await loadWorkspaceData(workspaceId);
+        if (!data) return; // Supabase unavailable — keep localStorage data
+
+        set({
+          workspaceId,
+          content: data.content.length > 0 ? data.content : get().content,
+          collections: data.collections.length > 0 ? data.collections : get().collections,
+          keywords: data.keywords.length > 0 ? data.keywords : get().keywords,
+          media: data.media.length > 0 ? data.media : get().media,
+          pipeline: data.pipeline.length > 0 ? data.pipeline : get().pipeline,
+        });
+      },
     }),
     {
       name: 'conduit-workspace',
       partialize: (state) => ({
         workspaceId: state.workspaceId,
+        userId: state.userId,
+        isAuthenticated: state.isAuthenticated,
         siteName: state.siteName,
         pricingPlan: state.pricingPlan,
         credits: state.credits,

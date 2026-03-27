@@ -47,6 +47,9 @@ const NAV_GROUPS: NavGroup[] = [
     { id: 'creator', icon: '🎬', label: 'Creator Studio', href: '/creator' },
     { id: 'visuals', icon: '🎨', label: 'Visual Studio', href: '/visuals' },
   ]},
+  { title: 'Distribution', items: [
+    { id: 'social', icon: '📢', label: 'Social', href: '/social' },
+  ]},
   { title: 'Monetization', items: [
     { id: 'monetisation', icon: '💰', label: 'Monetisation', href: '/monetisation' },
     { id: 'interlinks', icon: '🔗', label: 'Content Links', href: '/interlinks' },

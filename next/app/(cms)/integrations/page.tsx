@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWorkspace } from '@/stores/workspace';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { isGSCConnected } from '@/lib/gsc';
 
 interface Integration {
   id: string;
@@ -14,11 +15,12 @@ interface Integration {
   desc: string;
   category: string;
   configKey?: string;
+  oauth?: boolean;
 }
 
 const INTEGRATIONS: Integration[] = [
   { id: 'wordpress', name: 'WordPress', icon: 'W', desc: 'Publish content directly to your WordPress site via REST API', category: 'CMS' },
-  { id: 'gsc', name: 'Google Search Console', icon: 'G', desc: 'Import real ranking data, clicks, and impressions', category: 'Analytics' },
+  { id: 'gsc', name: 'Google Search Console', icon: 'G', desc: 'Import real ranking data, clicks, and impressions', category: 'Analytics', oauth: true },
   { id: 'ga', name: 'Google Analytics', icon: 'GA', desc: 'Track page views, engagement, and conversions', category: 'Analytics' },
   { id: 'slack', name: 'Slack', icon: 'S', desc: 'Get notifications when content is published or agents run', category: 'Notifications' },
   { id: 'twitter', name: 'Twitter / X', icon: 'X', desc: 'Auto-post content summaries and threads on publish', category: 'Social' },
@@ -40,12 +42,45 @@ export default function IntegrationsPage() {
         init[i.id] = true;
       }
     }
+    // GSC uses OAuth tokens
+    if (isGSCConnected(settings)) {
+      init['gsc'] = true;
+    }
     return init;
   });
   const [configuring, setConfiguring] = useState<string | null>(null);
   const [configValue, setConfigValue] = useState('');
 
+  // Handle GSC OAuth callback redirect parameters
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const gscStatus = params.get('gsc');
+
+    if (gscStatus === 'success') {
+      const refreshToken = params.get('gsc_refresh_token');
+      if (refreshToken) {
+        setSettings({
+          gscRefreshToken: refreshToken,
+          gscConnectedAt: new Date().toISOString(),
+        });
+        setConnected((prev) => ({ ...prev, gsc: true }));
+      }
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (gscStatus === 'error') {
+      // Clean URL — error already visible via lack of connection
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [setSettings]);
+
   function handleConnect(id: string) {
+    const integration = INTEGRATIONS.find((i) => i.id === id);
+    // GSC uses OAuth redirect
+    if (integration?.oauth) {
+      window.location.href = '/api/gsc/auth';
+      return;
+    }
     setConfiguring(id);
     setConfigValue('');
   }
@@ -63,6 +98,11 @@ export default function IntegrationsPage() {
 
   function handleDisconnect(id: string) {
     const integration = INTEGRATIONS.find((i) => i.id === id);
+    if (integration?.oauth && id === 'gsc') {
+      setSettings({ gscRefreshToken: '', gscSiteUrl: '', gscConnectedAt: '' });
+      setConnected({ ...connected, gsc: false });
+      return;
+    }
     if (integration?.configKey) {
       setSettings({ [integration.configKey]: '' } as Record<string, string>);
     } else {
@@ -117,7 +157,9 @@ export default function IntegrationsPage() {
                       </div>
                     ) : isConnected ? (
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleConnect(intg.id)} className="flex-1">Configure</Button>
+                        {!intg.oauth && (
+                          <Button size="sm" variant="outline" onClick={() => handleConnect(intg.id)} className="flex-1">Configure</Button>
+                        )}
                         <Button size="sm" variant="ghost" onClick={() => handleDisconnect(intg.id)} className="text-red-400 text-xs">Disconnect</Button>
                       </div>
                     ) : (

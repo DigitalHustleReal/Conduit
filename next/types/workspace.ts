@@ -37,6 +37,9 @@ export interface WorkspaceSettings {
   ytChannelName?: string;
   ytNiche?: string;
   ytTone?: string;
+  gscRefreshToken?: string;
+  gscSiteUrl?: string;
+  gscConnectedAt?: string;
 }
 
 export interface TeamMember {

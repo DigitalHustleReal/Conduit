@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useWorkspace } from '@/stores/workspace';
+import { heuristicSEOScore } from '@/lib/scoring/seo-score';
+import { heuristicAIScore } from '@/lib/scoring/ai-score';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,17 +57,46 @@ function EditorInner() {
   }, [title, slugEdited]);
 
   const wordCount = useMemo(() => body.trim().split(/\s+/).filter(Boolean).length, [body]);
-  const seoScore = useMemo(() => {
-    let score = 0;
-    if (title.length > 10) score += 20;
-    if (metaTitle.length > 10) score += 20;
-    if (metaDesc.length > 50) score += 20;
-    if (keyword && title.toLowerCase().includes(keyword.toLowerCase())) score += 20;
-    if (wordCount > 300) score += 20;
-    return score;
-  }, [title, metaTitle, metaDesc, keyword, wordCount]);
 
-  const aiScore = existing?.aiScore || 0;
+  // --- Live scoring with debounce ---
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [liveScores, setLiveScores] = useState({ seo: 0, ai: 0 });
+
+  const computeScores = useCallback(() => {
+    // Build a virtual ContentItem for scoring
+    const virtualItem = {
+      id: existing?.id || 0,
+      title,
+      slug,
+      content: body,
+      collection,
+      keyword,
+      tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+      status,
+      metaTitle,
+      metaDescription: metaDesc,
+      wordCount,
+      aiScore: 0,
+      seoScore: 0,
+      created: existing?.created || Date.now(),
+      updated: Date.now(),
+    };
+
+    const seo = heuristicSEOScore(virtualItem, content);
+    const ai = heuristicAIScore(virtualItem, content);
+    setLiveScores({ seo, ai });
+  }, [title, slug, body, collection, keyword, tags, status, metaTitle, metaDesc, wordCount, content, existing]);
+
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(computeScores, 400);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [computeScores]);
+
+  const seoScore = liveScores.seo;
+  const aiScore = liveScores.ai;
 
   function handleSave() {
     const now = Date.now();
@@ -73,14 +104,14 @@ function EditorInner() {
       updateContentItem(existing.id, {
         title, slug, content: body, collection, keyword,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-        status, metaTitle, metaDescription: metaDesc, wordCount, seoScore,
+        status, metaTitle, metaDescription: metaDesc, wordCount, seoScore, aiScore,
       });
     } else {
       addContent({
         id: now, title, slug, content: body, collection, keyword,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
         status, metaTitle, metaDescription: metaDesc, wordCount,
-        aiScore: 0, seoScore, created: now, updated: now,
+        aiScore, seoScore, created: now, updated: now,
       });
     }
   }
@@ -167,7 +198,10 @@ function EditorInner() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">AI Score</span>
-                <Badge variant="secondary">{aiScore}/100</Badge>
+                <Badge variant={aiScore >= 60 ? 'default' : aiScore >= 40 ? 'secondary' : 'destructive'}>{aiScore}/100</Badge>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div className="h-2 rounded-full transition-all" style={{ width: `${aiScore}%`, backgroundColor: aiScore >= 80 ? '#22c55e' : aiScore >= 60 ? '#eab308' : '#ef4444' }} />
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Word Count</span>

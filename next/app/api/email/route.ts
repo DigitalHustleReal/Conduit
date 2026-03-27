@@ -1,0 +1,163 @@
+import { Resend } from 'resend';
+
+const corsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+const FROM = process.env.RESEND_FROM || 'noreply@getconduit.io';
+
+// Shared email wrapper
+function emailShell(content: string): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#030508;font-family:system-ui,-apple-system,sans-serif">
+  <div style="max-width:520px;margin:0 auto;padding:40px 20px">
+    <div style="background:#080C14;border:1px solid #1E2A3E;border-radius:12px;padding:36px;color:#F0F4FF">
+      ${content}
+      <hr style="border:none;border-top:1px solid #1E2A3E;margin:28px 0 16px">
+      <p style="color:#4A5A7A;font-size:11px;margin:0;text-align:center">Conduit CMS \u2014 AI-native content management</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function ctaButton(text: string, href: string): string {
+  return `<a href="${href}" style="display:inline-block;margin-top:20px;padding:13px 30px;background:#6C63FF;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">${text}</a>`;
+}
+
+// Template: Welcome
+export function welcomeEmail(to: string, workspaceName: string) {
+  const siteUrl = process.env.SITE_URL || 'https://conduit-woad.vercel.app';
+  return {
+    to,
+    subject: 'Your Conduit workspace is ready',
+    html: emailShell(`
+      <h1 style="color:#6C63FF;margin:0 0 8px;font-size:24px">Welcome to Conduit \u2726</h1>
+      <p style="color:#8B9EC4;line-height:1.6;margin:16px 0">Your workspace <strong style="color:#F0F4FF">${workspaceName}</strong> is ready.</p>
+      <p style="color:#8B9EC4;line-height:1.6;margin:0">You have <strong style="color:#00D084">10 free AI calls</strong> to get started.</p>
+      ${ctaButton('Open My Workspace', siteUrl + '/app.html')}
+      <div style="margin-top:28px;padding:16px;background:#0E1420;border-radius:8px">
+        <p style="color:#F0F4FF;font-size:13px;font-weight:600;margin:0 0 10px">\u{1F680} First steps:</p>
+        <ol style="color:#8B9EC4;font-size:13px;line-height:1.8;margin:0;padding-left:18px">
+          <li>Create an article with AI</li>
+          <li>Try Bulk Generate for 10 articles at once</li>
+          <li>Check the SEO Center for optimization tips</li>
+        </ol>
+      </div>
+    `),
+  };
+}
+
+// Template: Usage warning
+export function usageWarningEmail(to: string, used: number, limit: number) {
+  const siteUrl = process.env.SITE_URL || 'https://conduit-woad.vercel.app';
+  const pct = Math.round((used / limit) * 100);
+  return {
+    to,
+    subject: '2 free AI calls remaining on Conduit',
+    html: emailShell(`
+      <h1 style="color:#FF9F43;margin:0 0 8px;font-size:22px">You're almost out of free AI calls</h1>
+      <p style="color:#8B9EC4;line-height:1.6;margin:16px 0">${used} of ${limit} calls used</p>
+      <div style="background:#0E1420;border-radius:6px;height:8px;overflow:hidden;margin:12px 0">
+        <div style="background:#FF9F43;height:100%;width:${pct}%;border-radius:6px"></div>
+      </div>
+      <div style="margin-top:24px;padding:16px;background:#0E1420;border-radius:8px">
+        <p style="color:#F0F4FF;font-size:13px;margin:0 0 12px"><strong>Two ways to keep going:</strong></p>
+        <p style="color:#8B9EC4;font-size:13px;line-height:1.6;margin:0 0 6px"><strong style="color:#00D084">Option A:</strong> Add your own Claude API key in AI Engine \u2014 free forever</p>
+        <p style="color:#8B9EC4;font-size:13px;line-height:1.6;margin:0"><strong style="color:#6C63FF">Option B:</strong> Upgrade to Pro \u2014 1,000 calls/month</p>
+      </div>
+      ${ctaButton('Upgrade Now', siteUrl + '/app.html#settings')}
+    `),
+  };
+}
+
+// Template: Upgrade confirmation
+export function upgradeConfirmEmail(to: string, plan: string, amount?: number) {
+  const siteUrl = process.env.SITE_URL || 'https://conduit-woad.vercel.app';
+  const planName = plan.charAt(0).toUpperCase() + plan.slice(1);
+  const credits = plan === 'business' ? '10,000' : '1,000';
+  return {
+    to,
+    subject: `You're on Conduit ${planName} \u{1F389}`,
+    html: emailShell(`
+      <h1 style="color:#6C63FF;margin:0 0 8px;font-size:24px">Conduit ${planName} \u2728</h1>
+      <p style="color:#8B9EC4;line-height:1.6;margin:16px 0">Your upgrade to <strong style="color:#F0F4FF">${planName}</strong> is confirmed${amount ? ` \u2014 $${(amount / 100).toFixed(2)}/mo` : ''}.</p>
+      <p style="color:#8B9EC4;line-height:1.6;margin:0">What's now unlocked:</p>
+      <ul style="color:#8B9EC4;line-height:1.8;padding-left:20px;margin:12px 0">
+        <li><strong style="color:#00D084">${credits}</strong> AI calls per month</li>
+        <li>All premium features</li>
+        <li>Priority support</li>
+      </ul>
+      ${ctaButton('Open Conduit', siteUrl + '/app.html')}
+    `),
+  };
+}
+
+type TemplateFn = (...args: unknown[]) => { to: string; subject: string; html: string };
+
+const TEMPLATES: Record<string, TemplateFn> = {
+  welcome: welcomeEmail as TemplateFn,
+  usageWarning: usageWarningEmail as TemplateFn,
+  upgradeConfirm: upgradeConfirmEmail as TemplateFn,
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 200, headers: corsHeaders });
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { to, template, data } = body;
+
+    if (!to || !template) {
+      return Response.json(
+        { error: 'Missing required fields: to, template' },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    const templateFn = TEMPLATES[template];
+    if (!templateFn) {
+      return Response.json(
+        { error: `Unknown template: ${template}` },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Build email from template
+    const args = [to, ...(Array.isArray(data) ? data : [data])];
+    const email = templateFn(...args);
+
+    // Send via Resend
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const { data: result, error } = await resend.emails.send({
+      from: FROM,
+      to: email.to,
+      subject: email.subject,
+      html: email.html,
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
+      return Response.json(
+        { error: 'Failed to send email', details: error },
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    return Response.json({ success: true, id: result?.id }, { status: 200, headers: corsHeaders });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('send-email error:', err);
+    return Response.json(
+      { error: 'Internal server error', message },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}

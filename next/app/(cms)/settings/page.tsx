@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useWorkspace, PLAN_LIMITS } from '@/stores/workspace';
+import { createCheckoutSession, redirectToCheckout, getPortalUrl } from '@/lib/stripe';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,22 +27,58 @@ export default function SettingsPage() {
     groq: settings.groqKey || '',
   });
   const [showKeys, setShowKeys] = useState({ openai: false, gemini: false, mistral: false, groq: false });
+  const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const creditPct = Math.min((credits.aiCalls / limits.aiCalls) * 100, 100);
   const storagePct = Math.min((credits.storage / limits.storage) * 100, 100);
 
   function handleSave() {
-    setWorkspace(workspaceId || 'default', localName);
-    setSettings({
-      niche: localNiche,
-      siteDomain: localDomain,
-      vercelHook: localVercelHook,
-      supabaseUrl: localSupabaseUrl,
-      openaiKey: apiKeys.openai,
-      geminiKey: apiKeys.gemini,
-      mistralKey: apiKeys.mistral,
-      groqKey: apiKeys.groq,
-    });
+    setSaving(true);
+    try {
+      setWorkspace(workspaceId || 'default', localName);
+      setSettings({
+        niche: localNiche,
+        siteDomain: localDomain,
+        vercelHook: localVercelHook,
+        supabaseUrl: localSupabaseUrl,
+        openaiKey: apiKeys.openai,
+        geminiKey: apiKeys.gemini,
+        mistralKey: apiKeys.mistral,
+        groqKey: apiKeys.groq,
+      });
+      toast.success('Settings saved successfully');
+    } catch {
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUpgrade(plan: 'pro' | 'business') {
+    setUpgrading(plan);
+    try {
+      const url = await createCheckoutSession(plan);
+      redirectToCheckout(url);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to start checkout';
+      toast.error(msg);
+      // Fallback: set plan locally for demo/test mode
+      setPlan(plan);
+      toast.info(`Plan set to ${plan} locally (Stripe not configured)`);
+    } finally {
+      setUpgrading(null);
+    }
+  }
+
+  async function handleManageBilling() {
+    try {
+      const url = await getPortalUrl();
+      window.location.href = url;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to open billing portal';
+      toast.error(msg);
+    }
   }
 
   function handleExport() {
@@ -96,9 +134,22 @@ export default function SettingsPage() {
             <span className="text-sm">Current Plan:</span>
             <Badge variant={pricingPlan === 'free' ? 'secondary' : 'default'} className="capitalize">{pricingPlan}</Badge>
           </div>
-          <div className="flex gap-2">
-            {pricingPlan !== 'pro' && <Button size="sm" variant="outline" onClick={() => setPlan('pro')}>Upgrade to Pro ($29/mo)</Button>}
-            {pricingPlan !== 'business' && <Button size="sm" onClick={() => setPlan('business')}>Upgrade to Business ($99/mo)</Button>}
+          <div className="flex gap-2 flex-wrap">
+            {pricingPlan !== 'pro' && (
+              <Button size="sm" variant="outline" onClick={() => handleUpgrade('pro')} disabled={!!upgrading}>
+                {upgrading === 'pro' ? 'Redirecting...' : 'Upgrade to Pro ($29/mo)'}
+              </Button>
+            )}
+            {pricingPlan !== 'business' && (
+              <Button size="sm" onClick={() => handleUpgrade('business')} disabled={!!upgrading}>
+                {upgrading === 'business' ? 'Redirecting...' : 'Upgrade to Business ($99/mo)'}
+              </Button>
+            )}
+            {pricingPlan !== 'free' && (
+              <Button size="sm" variant="outline" onClick={handleManageBilling}>
+                Manage Billing
+              </Button>
+            )}
           </div>
           <div className="space-y-2">
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -119,6 +170,7 @@ export default function SettingsPage() {
       <Card className="mb-4">
         <CardHeader><CardTitle className="text-sm">API Keys (BYOK)</CardTitle></CardHeader>
         <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">Add your own API keys for unlimited AI usage. Keys are stored locally and never sent to our servers.</p>
           {(['openai', 'gemini', 'mistral', 'groq'] as const).map((provider) => (
             <div key={provider} className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground w-16 capitalize">{provider}</label>
@@ -161,7 +213,9 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Button onClick={handleSave} className="w-full">Save Settings</Button>
+      <Button onClick={handleSave} className="w-full" disabled={saving}>
+        {saving ? 'Saving...' : 'Save Settings'}
+      </Button>
     </div>
   );
 }

@@ -432,5 +432,72 @@ END;
 $$;
 
 -- ============================================================
--- Done! 14 tables with RLS policies created.
+-- 15. SOCIAL POSTS (social distribution queue)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS social_posts (
+  id BIGSERIAL PRIMARY KEY,
+  workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('twitter', 'linkedin')),
+  content TEXT NOT NULL,
+  article_url TEXT,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'posted', 'failed')),
+  scheduled_at TIMESTAMPTZ,
+  posted_at TIMESTAMPTZ,
+  external_id TEXT,
+  external_url TEXT,
+  error TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE social_posts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "workspace_social_posts" ON social_posts
+  FOR ALL USING (workspace_id IN (
+    SELECT workspace_id FROM workspace_members WHERE user_id = auth.uid()
+  ));
+
+-- ============================================================
+-- 16. IMPORT HISTORY (content import tracking)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS import_history (
+  id BIGSERIAL PRIMARY KEY,
+  workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+  source TEXT NOT NULL CHECK (source IN ('notion', 'sheets', 'csv', 'json')),
+  items_imported INTEGER DEFAULT 0,
+  items_skipped INTEGER DEFAULT 0,
+  items_failed INTEGER DEFAULT 0,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE import_history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "workspace_import_history" ON import_history
+  FOR ALL USING (workspace_id IN (
+    SELECT workspace_id FROM workspace_members WHERE user_id = auth.uid()
+  ));
+
+-- ============================================================
+-- 17. AGENT SUGGESTIONS (tier-1 agents store suggestions for human review)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS agent_suggestions (
+  id BIGSERIAL PRIMARY KEY,
+  workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL,
+  content_id BIGINT REFERENCES content(id) ON DELETE CASCADE,
+  suggestion TEXT NOT NULL,
+  event TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'expired')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE agent_suggestions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "workspace_agent_suggestions" ON agent_suggestions
+  FOR ALL USING (workspace_id IN (
+    SELECT workspace_id FROM workspace_members WHERE user_id = auth.uid()
+  ));
+
+-- ============================================================
+-- Done! 17 tables with RLS policies created.
 -- ============================================================

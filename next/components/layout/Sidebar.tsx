@@ -73,20 +73,20 @@ export function Sidebar() {
   const pct = Math.min((used / limits.aiCalls) * 100, 100);
 
   return (
-    <aside className="w-60 flex flex-col h-full overflow-y-auto shrink-0 border-r border-slate-700/30 bg-[#080d1c]">
+    <aside className="w-60 flex flex-col h-full overflow-y-auto shrink-0 border-r border-sidebar-border bg-sidebar">
       {/* Brand */}
-      <div className="p-4 border-b border-slate-700/30 flex items-center gap-2.5">
+      <div className="p-4 border-b border-sidebar-border flex items-center gap-2.5">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-400 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/25">
           {'\u2726'}
         </div>
         <div>
-          <div className="text-sm font-extrabold tracking-tight text-slate-100">Conduit</div>
-          <div className="text-[10px] text-slate-500 font-mono">v8.0</div>
+          <div className="text-sm font-extrabold tracking-tight text-sidebar-foreground">Conduit</div>
+          <div className="text-[10px] text-sidebar-foreground/50 font-mono">v8.0</div>
         </div>
       </div>
 
       {/* Workspace */}
-      <div className="mx-3 mt-2.5 mb-1 p-2 bg-slate-800/40 rounded-lg border border-slate-700/30 text-xs font-semibold truncate text-slate-200">
+      <div className="mx-3 mt-2.5 mb-1 p-2 bg-sidebar-accent rounded-lg border border-sidebar-border text-xs font-semibold truncate text-sidebar-foreground">
         {siteName}
       </div>
 
@@ -96,8 +96,8 @@ export function Sidebar() {
           <div key={group.title} className="mb-1">
             <div
               className={cn(
-                'px-4 py-1.5 text-[9px] uppercase tracking-widest text-slate-500 font-mono',
-                group.collapsible && 'cursor-pointer hover:text-slate-300'
+                'px-4 py-1.5 text-[9px] uppercase tracking-widest text-sidebar-foreground/50 font-mono',
+                group.collapsible && 'cursor-pointer hover:text-sidebar-foreground'
               )}
               onClick={() => {
                 if (group.collapsible) {
@@ -118,7 +118,7 @@ export function Sidebar() {
                     'flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[12.5px] transition-all duration-200 relative',
                     isActive
                       ? 'bg-blue-500/10 text-blue-400 font-semibold border-l-[3px] border-blue-500 ml-2 pl-3.5 shadow-[inset_0_0_12px_rgba(59,130,246,0.06)]'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                      : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent'
                   )}
                 >
                   <span className="text-sm">{item.icon}</span>
@@ -136,12 +136,12 @@ export function Sidebar() {
       </nav>
 
       {/* Footer with credit meter */}
-      <div className="p-3 border-t border-slate-700/30 space-y-2">
-        <div className="flex items-center justify-between text-[10px] text-slate-500">
+      <div className="p-3 border-t border-sidebar-border space-y-2">
+        <div className="flex items-center justify-between text-[10px] text-sidebar-foreground/50">
           <span>AI Credits</span>
           <span className="font-mono">{used}/{limits.aiCalls}</span>
         </div>
-        <div className="h-1.5 bg-slate-800/60 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-sidebar-accent rounded-full overflow-hidden">
           <div
             className={cn(
               'h-full rounded-full transition-all duration-500',
@@ -150,7 +150,7 @@ export function Sidebar() {
             style={{ width: `${pct}%` }}
           />
         </div>
-        <div className="text-[10px] text-slate-500">
+        <div className="text-[10px] text-sidebar-foreground/50">
           141 agents &middot; 12 APIs
         </div>
       </div>

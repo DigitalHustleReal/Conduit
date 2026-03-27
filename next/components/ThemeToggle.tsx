@@ -71,7 +71,7 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
   if (!mounted) {
     return (
       <button
-        className={`relative w-8 h-8 rounded-lg border border-slate-700/30 bg-slate-800/40 flex items-center justify-center ${className}`}
+        className={`relative w-8 h-8 rounded-lg border border-border dark:bg-slate-800/40 bg-slate-200/60 flex items-center justify-center ${className}`}
         aria-label="Toggle theme"
       >
         <span className="w-4 h-4" />
@@ -86,7 +86,7 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
       onClick={cycle}
       title={LABELS[theme]}
       aria-label={LABELS[theme]}
-      className={`relative w-8 h-8 rounded-lg border border-slate-700/30 dark:bg-slate-800/40 bg-slate-200/60 flex items-center justify-center text-slate-400 dark:text-slate-400 hover:text-blue-400 hover:border-blue-500/40 transition-all duration-200 cursor-pointer ${className}`}
+      className={`relative w-8 h-8 rounded-lg border border-border dark:bg-slate-800/40 bg-slate-200/60 flex items-center justify-center text-muted-foreground dark:text-muted-foreground hover:text-blue-400 hover:border-blue-500/40 transition-all duration-200 cursor-pointer ${className}`}
     >
       <span className="transition-transform duration-300 ease-in-out inline-flex">
         <Icon className="w-4 h-4" />

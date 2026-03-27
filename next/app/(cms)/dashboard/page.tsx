@@ -111,11 +111,11 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight">
             {getGreeting()}, <span className="text-blue-400">{siteName || 'Conduit'}</span>
           </h1>
-          <p className="text-sm text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+          <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
             <span>{published.length} published</span>
-            <span className="text-slate-600">&#183;</span>
+            <span className="text-muted-foreground/50">&#183;</span>
             <span>{activeAgents} agents active</span>
-            <span className="text-slate-600">&#183;</span>
+            <span className="text-muted-foreground/50">&#183;</span>
             <span className="flex items-center gap-1.5">
               Autopilot
               {autopilot.enabled ? (
@@ -127,31 +127,31 @@ export default function DashboardPage() {
                   ON
                 </span>
               ) : (
-                <span className="text-slate-500 font-medium">OFF</span>
+                <span className="text-muted-foreground font-medium">OFF</span>
               )}
             </span>
           </p>
         </div>
-        <div className="text-xs text-slate-500 font-mono hidden sm:block">{formatDate()}</div>
+        <div className="text-xs text-muted-foreground font-mono hidden sm:block">{formatDate()}</div>
       </div>
 
       {/* ── Top Metrics Row ────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Content */}
-        <Card className="bg-slate-900/40 backdrop-blur border-slate-700/50 border-l-[3px] border-l-blue-500 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200">
+        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-blue-500 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Content</span>
-              <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Content</span>
+              <svg className="w-4 h-4 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
             </div>
-            <div className="text-3xl font-bold text-white mb-3">{totalContent}</div>
+            <div className="text-3xl font-bold text-foreground mb-3">{totalContent}</div>
             {/* Mini stacked bar */}
-            <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-800 mb-2">
+            <div className="flex h-1.5 rounded-full overflow-hidden bg-muted mb-2">
               {pubPct > 0 && <div className="bg-emerald-400 transition-all" style={{ width: `${pubPct}%` }} />}
               {draftPct > 0 && <div className="bg-amber-400 transition-all" style={{ width: `${draftPct}%` }} />}
               {reviewPct > 0 && <div className="bg-blue-400 transition-all" style={{ width: `${reviewPct}%` }} />}
             </div>
-            <div className="flex items-center gap-3 text-[10px] text-slate-500">
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />{published.length} pub</span>
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />{drafts.length} draft</span>
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" />{review.length} review</span>
@@ -160,72 +160,72 @@ export default function DashboardPage() {
         </Card>
 
         {/* Avg SEO Score */}
-        <Card className="bg-slate-900/40 backdrop-blur border-slate-700/50 border-l-[3px] border-l-emerald-500 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-200">
+        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-emerald-500 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-200">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Avg SEO Score</span>
-              <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Avg SEO Score</span>
+              <svg className="w-4 h-4 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
             </div>
             <div className="flex items-end gap-3">
               <div className={`text-3xl font-bold ${scoreColor(avgSEO)}`}>{avgSEO}</div>
-              <span className="text-xs text-slate-500 mb-1">/ 100</span>
+              <span className="text-xs text-muted-foreground mb-1">/ 100</span>
             </div>
             <div className="mt-3">
-              <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-800">
+              <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
                 <div className={`${scoreBg(avgSEO)} transition-all`} style={{ width: `${avgSEO}%` }} />
               </div>
             </div>
-            <p className="text-[10px] text-slate-500 mt-2">
+            <p className="text-[10px] text-muted-foreground mt-2">
               {avgSEO >= 80 ? 'Excellent optimization' : avgSEO >= 60 ? 'Good, room to improve' : avgSEO >= 40 ? 'Needs attention' : 'Critical — run SEO Guardian'}
             </p>
           </CardContent>
         </Card>
 
         {/* Active Agents */}
-        <Card className="bg-slate-900/40 backdrop-blur border-slate-700/50 border-l-[3px] border-l-cyan-500 hover:shadow-lg hover:shadow-cyan-500/5 transition-all duration-200">
+        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-cyan-500 hover:shadow-lg hover:shadow-cyan-500/5 transition-all duration-200">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Active Agents</span>
-              <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h9a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 15.75 4.5h-9A2.25 2.25 0 0 0 4.5 6.75v10.5A2.25 2.25 0 0 0 6.75 19.5Z" /></svg>
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Agents</span>
+              <svg className="w-4 h-4 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h9a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 15.75 4.5h-9A2.25 2.25 0 0 0 4.5 6.75v10.5A2.25 2.25 0 0 0 6.75 19.5Z" /></svg>
             </div>
             <div className="flex items-end gap-2">
-              <span className={`text-3xl font-bold ${activeAgents > 0 ? 'text-cyan-400' : 'text-slate-500'}`}>{activeAgents}</span>
-              <span className="text-xs text-slate-500 mb-1">of 8 running</span>
+              <span className={`text-3xl font-bold ${activeAgents > 0 ? 'text-cyan-400' : 'text-muted-foreground'}`}>{activeAgents}</span>
+              <span className="text-xs text-muted-foreground mb-1">of 8 running</span>
             </div>
             <div className="mt-3 flex gap-1">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div
                   key={i}
-                  className={`h-1.5 flex-1 rounded-full transition-all ${i < activeAgents ? 'bg-cyan-400' : 'bg-slate-800'}`}
+                  className={`h-1.5 flex-1 rounded-full transition-all ${i < activeAgents ? 'bg-cyan-400' : 'bg-muted'}`}
                 />
               ))}
             </div>
-            <p className="text-[10px] text-slate-500 mt-2">
+            <p className="text-[10px] text-muted-foreground mt-2">
               {activeAgents === 0 ? 'No agents running' : `${activeAgents} agent${activeAgents > 1 ? 's' : ''} monitoring your content`}
             </p>
           </CardContent>
         </Card>
 
         {/* AI Credits */}
-        <Card className={`bg-slate-900/40 backdrop-blur border-slate-700/50 border-l-[3px] ${creditPct >= 80 ? 'border-l-rose-500' : 'border-l-violet-500'} hover:shadow-lg transition-all duration-200`}>
+        <Card className={`bg-card/80 backdrop-blur border-border border-l-[3px] ${creditPct >= 80 ? 'border-l-rose-500' : 'border-l-violet-500'} hover:shadow-lg transition-all duration-200`}>
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">AI Credits</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Credits</span>
               <Badge variant="secondary" className="text-[9px] uppercase tracking-wider">{pricingPlan}</Badge>
             </div>
             <div className="flex items-end gap-2">
               <span className={`text-3xl font-bold ${creditPct >= 80 ? 'text-rose-400' : 'text-violet-400'}`}>{credits.aiCalls}</span>
-              <span className="text-xs text-slate-500 mb-1">/ {limits.aiCalls}</span>
+              <span className="text-xs text-muted-foreground mb-1">/ {limits.aiCalls}</span>
             </div>
             <div className="mt-3">
-              <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-800">
+              <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
                 <div
                   className={`transition-all ${creditPct >= 80 ? 'bg-rose-400' : creditPct >= 50 ? 'bg-amber-400' : 'bg-violet-400'}`}
                   style={{ width: `${creditPct}%` }}
                 />
               </div>
             </div>
-            <p className="text-[10px] text-slate-500 mt-2">
+            <p className="text-[10px] text-muted-foreground mt-2">
               {creditPct >= 90 ? 'Almost depleted' : creditPct >= 80 ? 'Running low' : `${Math.round(100 - creditPct)}% remaining`}
               {pricingPlan === 'free' && (
                 <Link href="/settings" className="text-blue-400 hover:underline ml-1.5">Upgrade</Link>
@@ -239,12 +239,12 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left Column — Recent Content (2/3) */}
         <div className="lg:col-span-2">
-          <Card className="bg-slate-900/40 backdrop-blur border-slate-700/50">
+          <Card className="bg-card/80 backdrop-blur border-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold">Recent Content</CardTitle>
                 <Link href="/editor/new">
-                  <Button size="sm" variant="outline" className="text-xs h-7 border-slate-700 hover:border-blue-500/50">
+                  <Button size="sm" variant="outline" className="text-xs h-7 border-border hover:border-blue-500/50">
                     + New Article
                   </Button>
                 </Link>
@@ -255,7 +255,7 @@ export default function DashboardPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-800">
+                      <tr className="text-[10px] text-muted-foreground uppercase tracking-wider border-b border-border">
                         <th className="text-left py-2 pr-2 font-semibold">Status</th>
                         <th className="text-left py-2 pr-2 font-semibold">Title</th>
                         <th className="text-left py-2 pr-2 font-semibold w-24">SEO</th>
@@ -269,19 +269,19 @@ export default function DashboardPage() {
                         const seo = c.seoScore || 0;
                         const ai = c.aiScore || 0;
                         return (
-                          <tr key={c.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors group">
+                          <tr key={c.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
                             <td className="py-2.5 pr-2">
                               <span className={`inline-block w-2 h-2 rounded-full ${statusDot(c.status)}`} />
                             </td>
                             <td className="py-2.5 pr-2 max-w-[260px]">
-                              <Link href={`/editor/${c.id}`} className="text-slate-200 hover:text-blue-400 transition-colors font-medium truncate block">
+                              <Link href={`/editor/${c.id}`} className="text-foreground hover:text-blue-400 transition-colors font-medium truncate block">
                                 {c.title || 'Untitled'}
                               </Link>
-                              {c.collection && <span className="text-[10px] text-slate-600">{c.collection}</span>}
+                              {c.collection && <span className="text-[10px] text-muted-foreground/50">{c.collection}</span>}
                             </td>
                             <td className="py-2.5 pr-2">
                               <div className="flex items-center gap-2">
-                                <div className="flex-1 h-1 rounded-full bg-slate-800 overflow-hidden max-w-[60px]">
+                                <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden max-w-[60px]">
                                   <div className={`h-full ${scoreBg(seo)} transition-all`} style={{ width: `${seo}%` }} />
                                 </div>
                                 <span className={`text-xs font-mono ${scoreColor(seo)}`}>{seo}</span>
@@ -289,16 +289,16 @@ export default function DashboardPage() {
                             </td>
                             <td className="py-2.5 pr-2">
                               <div className="flex items-center gap-2">
-                                <div className="flex-1 h-1 rounded-full bg-slate-800 overflow-hidden max-w-[60px]">
+                                <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden max-w-[60px]">
                                   <div className={`h-full ${scoreBg(ai)} transition-all`} style={{ width: `${ai}%` }} />
                                 </div>
                                 <span className={`text-xs font-mono ${scoreColor(ai)}`}>{ai}</span>
                               </div>
                             </td>
-                            <td className="py-2.5 pr-2 text-right text-xs text-slate-400 font-mono">
+                            <td className="py-2.5 pr-2 text-right text-xs text-muted-foreground font-mono">
                               {(c.wordCount || 0).toLocaleString()}
                             </td>
-                            <td className="py-2.5 text-right text-[11px] text-slate-500 font-mono">
+                            <td className="py-2.5 text-right text-[11px] text-muted-foreground font-mono">
                               {c.updated ? relativeTime(c.updated) : '--'}
                             </td>
                           </tr>
@@ -309,13 +309,13 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="text-center py-16">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-800/80 flex items-center justify-center">
-                    <svg className="w-8 h-8 text-slate-600" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
+                    <svg className="w-8 h-8 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                     </svg>
                   </div>
-                  <p className="text-lg font-semibold text-slate-300 mb-1">No content yet</p>
-                  <p className="text-sm text-slate-500 mb-5 max-w-xs mx-auto">Create your first article and let AI agents optimize it automatically.</p>
+                  <p className="text-lg font-semibold text-foreground mb-1">No content yet</p>
+                  <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">Create your first article and let AI agents optimize it automatically.</p>
                   <Link href="/editor/new">
                     <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
                       Create First Article
@@ -330,7 +330,7 @@ export default function DashboardPage() {
         {/* Right Column (1/3) */}
         <div className="space-y-4">
           {/* Quick Actions */}
-          <Card className="bg-slate-900/40 backdrop-blur border-slate-700/50">
+          <Card className="bg-card/80 backdrop-blur border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
             </CardHeader>
@@ -339,17 +339,17 @@ export default function DashboardPage() {
                 const c = colorMap[qa.color] || colorMap.blue;
                 return (
                   <Link key={qa.href} href={qa.href}>
-                    <div className={`flex items-center gap-3 p-3 rounded-lg border border-transparent hover:border-slate-700/80 hover:bg-slate-800/40 transition-all duration-200 group cursor-pointer`}>
+                    <div className={`flex items-center gap-3 p-3 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-all duration-200 group cursor-pointer`}>
                       <div className={`w-9 h-9 rounded-lg ${c.iconBg} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform`}>
                         <svg className={`w-4 h-4 ${c.text}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" d={qa.iconPath} />
                         </svg>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-slate-200 group-hover:text-white transition-colors">{qa.label}</div>
-                        <div className="text-[11px] text-slate-500 truncate">{qa.desc}</div>
+                        <div className="text-sm font-semibold text-foreground group-hover:text-foreground transition-colors">{qa.label}</div>
+                        <div className="text-[11px] text-muted-foreground truncate">{qa.desc}</div>
                       </div>
-                      <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <svg className="w-4 h-4 text-muted-foreground/50 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                       </svg>
                     </div>
@@ -360,27 +360,27 @@ export default function DashboardPage() {
           </Card>
 
           {/* Agent Status */}
-          <Card className="bg-slate-900/40 backdrop-blur border-slate-700/50">
+          <Card className="bg-card/80 backdrop-blur border-border">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold">Agent Status</CardTitle>
-                <Link href="/agents" className="text-[10px] text-slate-500 hover:text-blue-400 transition-colors uppercase tracking-wider">View All</Link>
+                <Link href="/agents" className="text-[10px] text-muted-foreground hover:text-blue-400 transition-colors uppercase tracking-wider">View All</Link>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-0.5">
                 {Object.entries(agents.registry).map(([id, agent]) => (
-                  <div key={id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded-md hover:bg-slate-800/40 transition-colors">
+                  <div key={id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
                     <div className="flex items-center gap-2.5">
                       <span className="relative flex h-2 w-2">
                         {agent.enabled && agent.running && (
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                         )}
-                        <span className={`relative inline-flex rounded-full h-2 w-2 ${agent.enabled ? (agent.running ? 'bg-emerald-400' : 'bg-emerald-400/60') : 'bg-slate-700'}`} />
+                        <span className={`relative inline-flex rounded-full h-2 w-2 ${agent.enabled ? (agent.running ? 'bg-emerald-400' : 'bg-emerald-400/60') : 'bg-muted-foreground/30'}`} />
                       </span>
-                      <span className={`${agent.enabled ? 'text-slate-300' : 'text-slate-600'}`}>{AGENT_NAMES[id] || id}</span>
+                      <span className={`${agent.enabled ? 'text-foreground' : 'text-muted-foreground/50'}`}>{AGENT_NAMES[id] || id}</span>
                     </div>
-                    <span className="text-[10px] text-slate-600 font-mono">
+                    <span className="text-[10px] text-muted-foreground/50 font-mono">
                       {agent.lastRun ? relativeTime(agent.lastRun) : 'Never'}
                     </span>
                   </div>
@@ -390,29 +390,29 @@ export default function DashboardPage() {
           </Card>
 
           {/* Autopilot Mini Card */}
-          <Card className={`bg-slate-900/40 backdrop-blur border-slate-700/50 ${autopilot.enabled ? 'border-emerald-500/20' : ''}`}>
+          <Card className={`bg-card/80 backdrop-blur border-border ${autopilot.enabled ? 'border-emerald-500/20' : ''}`}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-slate-300">Autopilot</span>
-                  <Badge variant={autopilot.enabled ? 'default' : 'secondary'} className={`text-[9px] ${autopilot.enabled ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'text-slate-500'}`}>
+                  <span className="text-sm font-semibold text-foreground">Autopilot</span>
+                  <Badge variant={autopilot.enabled ? 'default' : 'secondary'} className={`text-[9px] ${autopilot.enabled ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'text-muted-foreground'}`}>
                     {autopilot.enabled ? 'ON' : 'OFF'}
                   </Badge>
                 </div>
-                <Link href="/agents" className="text-[10px] text-slate-500 hover:text-blue-400 transition-colors">Configure</Link>
+                <Link href="/agents" className="text-[10px] text-muted-foreground hover:text-blue-400 transition-colors">Configure</Link>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Budget used today</span>
-                  <span className="font-mono text-slate-400">{autopilot.creditBudget.used_today} / {autopilot.creditBudget.daily}</span>
+                  <span className="text-muted-foreground">Budget used today</span>
+                  <span className="font-mono text-muted-foreground">{autopilot.creditBudget.used_today} / {autopilot.creditBudget.daily}</span>
                 </div>
-                <div className="flex h-1 rounded-full overflow-hidden bg-slate-800">
+                <div className="flex h-1 rounded-full overflow-hidden bg-muted">
                   <div
                     className={`transition-all ${autopilot.creditBudget.used_today / autopilot.creditBudget.daily > 0.8 ? 'bg-amber-400' : 'bg-emerald-400'}`}
                     style={{ width: `${Math.min((autopilot.creditBudget.used_today / autopilot.creditBudget.daily) * 100, 100)}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-600">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground/50">
                   <span>{autopilot.stats.total_runs} runs</span>
                   <span>{autopilot.stats.articles_created} articles</span>
                   <span>{autopilot.stats.issues_fixed} fixes</span>
@@ -424,29 +424,29 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Bottom: Full-Width Credit Bar ──────────────── */}
-      <Card className="bg-slate-900/40 backdrop-blur border-slate-700/50">
+      <Card className="bg-card/80 backdrop-blur border-border">
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Credit Usage</span>
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Credit Usage</span>
               <Badge variant="secondary" className="text-[9px] uppercase tracking-wider">{pricingPlan} plan</Badge>
             </div>
-            <div className="flex items-center gap-4 text-xs text-slate-500">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span className="font-mono">{credits.aiCalls} / {limits.aiCalls} AI calls</span>
-              <span className="text-slate-700">|</span>
+              <span className="text-border">|</span>
               <span className="font-mono">{credits.storage} / {limits.storage} MB storage</span>
-              <span className="text-slate-700">|</span>
+              <span className="text-border">|</span>
               <span className="font-mono">{credits.apiReqs} / {limits.apiReqs} API reqs</span>
             </div>
           </div>
-          <div className="flex h-2 rounded-full overflow-hidden bg-slate-800">
+          <div className="flex h-2 rounded-full overflow-hidden bg-muted">
             <div
               className={`transition-all rounded-full ${creditPct >= 80 ? 'bg-rose-400' : creditPct >= 50 ? 'bg-amber-400' : 'bg-blue-400'}`}
               style={{ width: `${creditPct}%` }}
             />
           </div>
           {pricingPlan === 'free' && (
-            <div className="mt-2 text-[11px] text-slate-500">
+            <div className="mt-2 text-[11px] text-muted-foreground">
               On the Free plan.{' '}
               <Link href="/settings" className="text-blue-400 hover:underline">
                 Upgrade to Pro

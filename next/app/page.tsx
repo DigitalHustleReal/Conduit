@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import HeroDemo from '@/components/HeroDemo';
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
@@ -61,178 +62,9 @@ function useReveal() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Animated Dashboard Preview                                         */
+/*  HeroDemo is now in @/components/HeroDemo.tsx                       */
 /* ------------------------------------------------------------------ */
 
-const PREVIEW_NAV = [
-  { icon: '\u26A1', label: 'Dashboard', active: true },
-  { icon: '\uD83D\uDCC4', label: 'Content', active: false },
-  { icon: '\u2726', label: 'AI Studio', active: false },
-  { icon: '\uD83E\uDD16', label: 'Agents', active: false },
-  { icon: '\uD83D\uDD0D', label: 'SEO', active: false },
-];
-
-const PREVIEW_ROWS = [
-  { title: 'Best Credit Cards 2026', score: 94, status: 'Published', statusColor: 'bg-emerald-400' },
-  { title: 'How to Start a Blog in 2026', score: 87, status: 'Review', statusColor: 'bg-blue-400' },
-  { title: 'Top 10 AI Tools for Content', score: 91, status: 'Published', statusColor: 'bg-emerald-400' },
-  { title: 'SEO Checklist for Beginners', score: 72, status: 'Draft', statusColor: 'bg-amber-400' },
-];
-
-const AGENT_LOG = "SEO Guardian fixed meta description on 'Best Credit Cards 2026'... AI Score improved from 78 to 94.";
-
-function useCountUp(target: number, duration: number, active: boolean) {
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    let start = 0;
-    const steps = Math.ceil(duration / 30);
-    const inc = target / steps;
-    const id = setInterval(() => {
-      start += inc;
-      if (start >= target) { setVal(target); clearInterval(id); }
-      else setVal(Math.round(start));
-    }, 30);
-    return () => clearInterval(id);
-  }, [target, duration, active]);
-  return val;
-}
-
-function DashboardPreview() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [typedLen, setTypedLen] = useState(0);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } }, { threshold: 0.15 });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  const published = useCountUp(47, 1800, visible);
-  const drafts = useCountUp(12, 1200, visible);
-  const aiScore = useCountUp(94, 2000, visible);
-  const agentsNum = useCountUp(8, 1000, visible);
-
-  // Typing effect for agent log
-  useEffect(() => {
-    if (!visible) return;
-    const delay = setTimeout(() => {
-      const id = setInterval(() => {
-        setTypedLen(prev => {
-          if (prev >= AGENT_LOG.length) { clearInterval(id); return prev; }
-          return prev + 1;
-        });
-      }, 35);
-      return () => clearInterval(id);
-    }, 3000);
-    return () => clearTimeout(delay);
-  }, [visible]);
-
-  return (
-    <div ref={ref} className="mt-16 mx-auto max-w-3xl rounded-xl overflow-hidden anim-preview-glow border border-blue-500/20" style={{ transform: 'perspective(1200px) rotateX(2deg)' }}>
-      {/* Browser chrome */}
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-card border-b border-border">
-        <span className="w-3 h-3 rounded-full bg-red-500/80" />
-        <span className="w-3 h-3 rounded-full bg-yellow-500/80" />
-        <span className="w-3 h-3 rounded-full bg-green-500/80" />
-        <span className="ml-3 text-xs text-muted-foreground font-mono">Conduit &mdash; Dashboard</span>
-        <div className="ml-auto flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span className="text-[10px] text-emerald-400 font-mono">3 agents running</span>
-        </div>
-      </div>
-
-      <div className="flex bg-card/80 backdrop-blur relative" style={{ minHeight: 320 }}>
-        {/* Mini sidebar */}
-        <div className="w-36 border-r border-border bg-card py-3 shrink-0 hidden sm:block">
-          <div className="px-3 mb-3 flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded bg-gradient-to-br from-blue-500 to-blue-400 flex items-center justify-center text-[8px] text-white font-bold">{'\u2726'}</div>
-            <span className="text-[10px] font-bold text-foreground">Conduit</span>
-          </div>
-          {PREVIEW_NAV.map((item, i) => (
-            <div
-              key={item.label}
-              className={`flex items-center gap-2 px-3 py-1.5 mx-1.5 rounded text-[11px] transition-colors ${
-                item.active
-                  ? 'bg-blue-500/15 text-blue-400 border-l-2 border-blue-500'
-                  : 'text-muted-foreground'
-              } ${i === 2 ? 'anim-nav-hover' : ''}`}
-            >
-              <span className="text-xs">{item.icon}</span>
-              {item.label}
-            </div>
-          ))}
-        </div>
-
-        {/* Main content */}
-        <div className="flex-1 p-4 overflow-hidden">
-          {/* Stats row */}
-          <div className="grid grid-cols-4 gap-2 mb-4">
-            {[
-              { label: 'Published', val: published, color: 'text-emerald-400', border: 'border-l-emerald-500' },
-              { label: 'Drafts', val: drafts, color: 'text-amber-400', border: 'border-l-amber-500' },
-              { label: 'AI Score', val: aiScore, color: 'text-blue-400', border: 'border-l-blue-500' },
-              { label: 'Agents', val: agentsNum, color: 'text-cyan-400', border: 'border-l-cyan-500' },
-            ].map(s => (
-              <div key={s.label} className={`bg-muted rounded-lg p-2.5 border border-border border-l-2 ${s.border}`}>
-                <p className="text-[10px] text-muted-foreground mb-0.5">{s.label}</p>
-                <p className={`text-lg font-black ${s.color}`}>{s.val}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Content list */}
-          <div className="mb-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 font-mono">Recent Content</p>
-            <div className="space-y-1">
-              {PREVIEW_ROWS.map((row, i) => (
-                <div
-                  key={row.title}
-                  className={`flex items-center gap-2 py-1.5 px-2 rounded bg-muted/50 text-[11px] ${visible ? 'anim-slide-row' : 'opacity-0'}`}
-                  style={{ animationDelay: `${1.5 + i * 0.3}s` }}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${row.statusColor} shrink-0`} />
-                  <span className="text-foreground/80 truncate flex-1">{row.title}</span>
-                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden shrink-0">
-                    <div
-                      className={`h-full rounded-full ${row.score >= 90 ? 'bg-emerald-400' : row.score >= 80 ? 'bg-blue-400' : 'bg-amber-400'} ${visible ? 'anim-bar-fill' : ''}`}
-                      style={{ '--bar-w': `${row.score}%`, animationDelay: `${2 + i * 0.3}s` } as React.CSSProperties}
-                    />
-                  </div>
-                  <span className="text-muted-foreground text-[10px] w-6 text-right font-mono">{row.score}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Agent activity log */}
-          <div className="bg-muted/50 rounded-lg p-2.5 border border-border/50">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider">Agent Activity</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground font-mono leading-relaxed">
-              {AGENT_LOG.slice(0, typedLen)}
-              {typedLen < AGENT_LOG.length && <span className="anim-typing-cursor text-blue-400">|</span>}
-            </p>
-          </div>
-        </div>
-
-        {/* Animated cursor */}
-        {visible && (
-          <div className="anim-cursor absolute pointer-events-none z-20" style={{ top: '50%', left: '50%' }}>
-            <svg width="16" height="20" viewBox="0 0 16 20" fill="none">
-              <path d="M1 1L1 15L5 11L9 19L12 17.5L8 10L13 10L1 1Z" fill="white" stroke="black" strokeWidth="1" />
-            </svg>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
@@ -340,8 +172,8 @@ export default function LandingPage() {
 
           <p className="text-xs text-muted-foreground mt-5 tracking-wide">Free forever &bull; No credit card &bull; 100 AI calls/month</p>
 
-          {/* Animated dashboard preview */}
-          <DashboardPreview />
+          {/* Animated product demo */}
+          <HeroDemo />
         </div>
       </section>
 

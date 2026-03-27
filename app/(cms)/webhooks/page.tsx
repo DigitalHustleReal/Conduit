@@ -121,7 +121,12 @@ export default function WebhooksPage() {
                   ))}
                 </div>
               </div>
-              <Button size="sm" onClick={addWebhook}>Create Webhook</Button>
+              {selectedEvents.length === 0 && (
+                <p className="text-xs text-amber-400">↑ Click events above to select them</p>
+              )}
+              <Button size="sm" onClick={addWebhook} disabled={!newUrl.trim() || selectedEvents.length === 0}>
+                Create Webhook {selectedEvents.length > 0 ? `(${selectedEvents.length} events)` : ''}
+              </Button>
             </div>
           )}
 

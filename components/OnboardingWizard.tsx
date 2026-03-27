@@ -220,13 +220,6 @@ export function OnboardingWizard() {
     setGenerating(true);
     setGenError('');
 
-    const canDeduct = deductCredit('aiCalls');
-    if (!canDeduct) {
-      setGenError('No AI credits remaining. Skip or upgrade your plan.');
-      setGenerating(false);
-      return;
-    }
-
     try {
       const prompt = `Write a short introductory article (about 150 words) with the title "${data.articleTitle}"${
         data.articleKeyword ? ` targeting the keyword "${data.articleKeyword}"` : ''
@@ -236,6 +229,9 @@ export function OnboardingWizard() {
         maxTokens: 600,
         system: 'You are a professional content writer. Write concise, SEO-friendly articles.',
       }, settings as unknown as Record<string, string>);
+
+      // Deduct credit only after successful AI response
+      deductCredit('aiCalls');
 
       updateData({ generatedContent: result });
 
@@ -704,8 +700,9 @@ function StepFirstContent({
         </button>
         <button
           type="button"
-          onClick={onNext}
-          className="flex-1 rounded-lg border border-[var(--color-border,hsl(240_3.7%_15.9%))] bg-background px-6 py-2.5 text-sm font-medium text-foreground transition hover:bg-blue-600 hover:text-white"
+          disabled={generating}
+          onClick={() => { onNext(); }}
+          className="flex-1 rounded-lg border border-[var(--color-border,hsl(240_3.7%_15.9%))] bg-background px-6 py-2.5 text-sm font-medium text-foreground transition hover:bg-blue-600 hover:text-white disabled:opacity-40"
         >
           {data.generatedContent ? 'Continue' : "Skip — I'll create content later"}
         </button>

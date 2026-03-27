@@ -195,7 +195,7 @@ export default function LandingPage() {
       </section>
 
       {/* ========== 4. FEATURES ========== */}
-      <section id="features" className="py-24 px-6">
+      <section id="features" className="py-16 px-6">
         <div ref={r3.ref} className={`reveal-base ${r3.cls} max-w-6xl mx-auto`}>
           <div className="text-center mb-20">
             <h2 className="text-3xl sm:text-4xl font-black mb-3">Everything you need to scale content</h2>
@@ -309,7 +309,7 @@ const articles = `}<span className="text-blue-400">await</span>{` client.getCont
       </section>
 
       {/* ========== 6. BEFORE / AFTER ========== */}
-      <section className="py-24 px-6">
+      <section className="py-16 px-6">
         <div ref={r5.ref} className={`reveal-base ${r5.cls} max-w-5xl mx-auto`}>
           <h2 className="text-3xl sm:text-4xl font-black text-center mb-16">The old way vs. Conduit</h2>
 

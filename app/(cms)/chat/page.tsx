@@ -48,19 +48,6 @@ export default function AIChatPage() {
     setInput('');
     setIsTyping(true);
 
-    const ok = deductCredit('aiCalls');
-    if (!ok) {
-      const limitMsg: ChatMessage = {
-        role: 'assistant',
-        content: 'You have reached your credit limit. Please upgrade your plan or add a BYOK API key in Settings to continue.',
-        ts: Date.now(),
-      };
-      setMessages((prev) => [...prev, limitMsg]);
-      setIsTyping(false);
-      toast.error('Credit limit reached');
-      return;
-    }
-
     // Build workspace context for the system prompt
     const workspaceContext = [
       `User's workspace has ${content.length} articles and ${keywords.length} keywords.`,
@@ -107,6 +94,12 @@ export default function AIChatPage() {
           m.ts === placeholderId && !m.content ? { ...m, content: result } : m
         )
       );
+
+      // Deduct credit only after successful AI response
+      const ok = deductCredit('aiCalls');
+      if (!ok) {
+        toast.warning('Credit limit reached. This may be your last free call.');
+      }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error occurred';
       setMessages((prev) =>

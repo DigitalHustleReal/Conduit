@@ -82,13 +82,6 @@ export default function AIStudioPage() {
 
   const handleRun = useCallback(async (toolName: string) => {
     if (activeTool === toolName && inputText) {
-      const ok = deductCredit('aiCalls');
-      if (!ok) {
-        setOutput('Insufficient credits. Please upgrade your plan or add a BYOK API key in Settings.');
-        toast.error('Insufficient credits');
-        return;
-      }
-
       setLoading(true);
       setOutput('');
 
@@ -111,6 +104,12 @@ export default function AIStudioPage() {
         );
         // If streaming didn't populate output (e.g. non-streaming provider), set it now
         setOutput((prev) => prev || result);
+
+        // Deduct credit only after successful AI response
+        const ok = deductCredit('aiCalls');
+        if (!ok) {
+          toast.warning('Credit limit reached. This may be your last free call.');
+        }
         toast.success(`${toolName} completed`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Unknown error';

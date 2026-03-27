@@ -552,25 +552,44 @@ const articles = `}<span className="text-blue-400">await</span>{` client.getCont
             <div>
               <p className="font-semibold text-sm mb-4 text-foreground">Product</p>
               <ul className="space-y-2.5 text-sm text-muted-foreground">
-                {['Features', 'Pricing', 'API Docs', 'Changelog'].map(l => <li key={l}><a href="#" className="hover:text-foreground transition-colors">{l}</a></li>)}
+                {[
+                  { label: 'Features', href: '#features' },
+                  { label: 'Pricing', href: '#pricing' },
+                  { label: 'API Docs', href: '/docs/api' },
+                  { label: 'Changelog', href: '/changelog' },
+                ].map(l => <li key={l.label}><Link href={l.href} className="hover:text-foreground transition-colors">{l.label}</Link></li>)}
               </ul>
             </div>
             <div>
               <p className="font-semibold text-sm mb-4 text-foreground">Resources</p>
               <ul className="space-y-2.5 text-sm text-muted-foreground">
-                {['Blog', 'Documentation', 'Help Center', 'Status'].map(l => <li key={l}><a href="#" className="hover:text-foreground transition-colors">{l}</a></li>)}
+                {[
+                  { label: 'Blog', href: '/blog' },
+                  { label: 'Documentation', href: '/docs' },
+                  { label: 'Help Center', href: '/docs' },
+                  { label: 'Status', href: 'https://status.getconduit.io' },
+                ].map(l => <li key={l.label}>{l.href.startsWith('http') ? <a href={l.href} target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">{l.label}</a> : <Link href={l.href} className="hover:text-foreground transition-colors">{l.label}</Link>}</li>)}
               </ul>
             </div>
             <div>
               <p className="font-semibold text-sm mb-4 text-foreground">Company</p>
               <ul className="space-y-2.5 text-sm text-muted-foreground">
-                {['About', 'Careers', 'Contact', 'Press'].map(l => <li key={l}><a href="#" className="hover:text-foreground transition-colors">{l}</a></li>)}
+                {[
+                  { label: 'About', href: '/about' },
+                  { label: 'Careers', href: '/about' },
+                  { label: 'Contact', href: '/contact' },
+                  { label: 'Press', href: '/about' },
+                ].map(l => <li key={l.label}><Link href={l.href} className="hover:text-foreground transition-colors">{l.label}</Link></li>)}
               </ul>
             </div>
             <div>
               <p className="font-semibold text-sm mb-4 text-foreground">Legal</p>
               <ul className="space-y-2.5 text-sm text-muted-foreground">
-                {['Privacy', 'Terms', 'Security'].map(l => <li key={l}><a href="#" className="hover:text-foreground transition-colors">{l}</a></li>)}
+                {[
+                  { label: 'Privacy', href: '/privacy' },
+                  { label: 'Terms', href: '/terms' },
+                  { label: 'Security', href: '/security' },
+                ].map(l => <li key={l.label}><Link href={l.href} className="hover:text-foreground transition-colors">{l.label}</Link></li>)}
               </ul>
             </div>
           </div>

@@ -34,24 +34,24 @@ export default function DashboardPage() {
     { label: 'Published', value: published.length, icon: '\uD83D\uDCC4', color: 'text-emerald-400', borderColor: 'border-l-emerald-500', bgGlow: 'hover:shadow-emerald-500/5' },
     { label: 'Drafts', value: drafts.length, icon: '\uD83D\uDCDD', color: 'text-amber-400', borderColor: 'border-l-amber-500', bgGlow: 'hover:shadow-amber-500/5' },
     { label: 'In Review', value: review.length, icon: '\uD83D\uDC41', color: 'text-blue-400', borderColor: 'border-l-blue-500', bgGlow: 'hover:shadow-blue-500/5' },
-    { label: 'Keywords', value: keywords.length, icon: '\uD83D\uDD11', color: 'text-violet-400', borderColor: 'border-l-violet-500', bgGlow: 'hover:shadow-violet-500/5' },
-    { label: 'Avg SEO', value: avgSEO, icon: '\uD83D\uDD0D', color: avgSEO >= 70 ? 'text-emerald-400' : 'text-amber-400', borderColor: avgSEO >= 70 ? 'border-l-emerald-500' : 'border-l-amber-500', bgGlow: 'hover:shadow-violet-500/5' },
-    { label: 'Avg AI Quality', value: avgAI, icon: '\u2726', color: avgAI >= 70 ? 'text-emerald-400' : 'text-amber-400', borderColor: avgAI >= 70 ? 'border-l-emerald-500' : 'border-l-amber-500', bgGlow: 'hover:shadow-violet-500/5' },
+    { label: 'Keywords', value: keywords.length, icon: '\uD83D\uDD11', color: 'text-blue-400', borderColor: 'border-l-blue-500', bgGlow: 'hover:shadow-blue-500/5' },
+    { label: 'Avg SEO', value: avgSEO, icon: '\uD83D\uDD0D', color: avgSEO >= 70 ? 'text-emerald-400' : 'text-amber-400', borderColor: avgSEO >= 70 ? 'border-l-emerald-500' : 'border-l-amber-500', bgGlow: 'hover:shadow-blue-500/5' },
+    { label: 'Avg AI Quality', value: avgAI, icon: '\u2726', color: avgAI >= 70 ? 'text-emerald-400' : 'text-amber-400', borderColor: avgAI >= 70 ? 'border-l-emerald-500' : 'border-l-amber-500', bgGlow: 'hover:shadow-blue-500/5' },
     { label: 'Active Agents', value: activeAgents, icon: '\uD83E\uDD16', color: activeAgents > 0 ? 'text-emerald-400' : 'text-muted-foreground', borderColor: 'border-l-cyan-500', bgGlow: 'hover:shadow-cyan-500/5' },
-    { label: 'AI Credits', value: `${credits.aiCalls}/${limits.aiCalls}`, icon: '\uD83D\uDD2E', color: creditPct >= 80 ? 'text-red-400' : 'text-violet-400', borderColor: creditPct >= 80 ? 'border-l-red-500' : 'border-l-violet-500', bgGlow: 'hover:shadow-violet-500/5' },
+    { label: 'AI Credits', value: `${credits.aiCalls}/${limits.aiCalls}`, icon: '\uD83D\uDD2E', color: creditPct >= 80 ? 'text-red-400' : 'text-blue-400', borderColor: creditPct >= 80 ? 'border-l-red-500' : 'border-l-blue-500', bgGlow: 'hover:shadow-blue-500/5' },
   ];
 
   const quickActions = [
-    { href: '/editor/new', icon: '\u2726', label: 'New Article', desc: 'Create with AI', gradient: 'from-violet-500/20 to-violet-600/5', hoverBorder: 'hover:border-violet-500/50' },
-    { href: '/ai-studio', icon: '\uD83E\uDDE0', label: 'AI Studio', desc: '21 AI tools', gradient: 'from-pink-500/20 to-pink-600/5', hoverBorder: 'hover:border-pink-500/50' },
+    { href: '/editor/new', icon: '\u2726', label: 'New Article', desc: 'Create with AI', gradient: 'from-blue-500/20 to-blue-600/5', hoverBorder: 'hover:border-blue-500/50' },
+    { href: '/ai-studio', icon: '\uD83E\uDDE0', label: 'AI Studio', desc: '21 AI tools', gradient: 'from-cyan-500/20 to-cyan-600/5', hoverBorder: 'hover:border-cyan-500/50' },
     { href: '/agents', icon: '\uD83E\uDD16', label: 'AI Agents', desc: `${activeAgents} active`, gradient: 'from-emerald-500/20 to-emerald-600/5', hoverBorder: 'hover:border-emerald-500/50' },
-    { href: '/seo', icon: '\uD83D\uDD0D', label: 'SEO Center', desc: `Avg score: ${avgSEO}`, gradient: 'from-cyan-500/20 to-cyan-600/5', hoverBorder: 'hover:border-cyan-500/50' },
+    { href: '/seo', icon: '\uD83D\uDD0D', label: 'SEO Center', desc: `Avg score: ${avgSEO}`, gradient: 'from-blue-400/20 to-blue-500/5', hoverBorder: 'hover:border-blue-400/50' },
   ];
 
   return (
     <div>
       <div className="mb-8">
-        <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-1">Overview</p>
+        <p className="text-xs uppercase tracking-widest text-slate-500 font-mono mb-1">Overview</p>
         <h1 className="text-2xl font-bold">{siteName} Dashboard</h1>
         <p className="text-sm text-muted-foreground mt-1.5">
           {content.length} articles &middot; {keywords.length} keywords &middot; {activeAgents} agents active
@@ -66,7 +66,7 @@ export default function DashboardPage() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-lg">{m.icon}</span>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono">{m.label}</span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-mono">{m.label}</span>
               </div>
               <div className={`text-2xl font-bold ${m.color}`}>{m.value}</div>
             </CardContent>
@@ -136,9 +136,9 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-1.5">
               {Object.entries(agents.registry).map(([id, agent]) => (
-                <div key={id} className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-muted/50 transition-colors">
+                <div key={id} className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-blue-500/5 transition-colors">
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${agent.enabled ? (agent.running ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-400') : 'bg-zinc-600'}`} />
+                    <div className={`w-2 h-2 rounded-full ${agent.enabled ? (agent.running ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-400') : 'bg-slate-600'}`} />
                     <span className={agent.enabled ? 'text-foreground' : 'text-muted-foreground'}>{AGENT_NAMES[id] || id}</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground font-mono">
@@ -180,7 +180,7 @@ export default function DashboardPage() {
               <div className="pt-1 text-[10px] text-muted-foreground">
                 Plan: <Badge variant="secondary" className="text-[9px]">{pricingPlan}</Badge>
                 {pricingPlan === 'free' && (
-                  <Link href="/settings" className="text-violet-400 hover:underline ml-2">Upgrade</Link>
+                  <Link href="/settings" className="text-blue-400 hover:underline ml-2">Upgrade</Link>
                 )}
               </div>
             </div>
@@ -199,7 +199,7 @@ export default function DashboardPage() {
         <CardContent>
           <div className="space-y-1">
             {content.slice(0, 8).map((c) => (
-              <Link key={c.id} href={`/editor/${c.id}`} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 transition-all duration-200 group">
+              <Link key={c.id} href={`/editor/${c.id}`} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-blue-500/5 transition-all duration-200 group">
                 <div className="flex items-center gap-3">
                   <Badge
                     variant={c.status === 'published' ? 'default' : 'secondary'}
@@ -211,7 +211,7 @@ export default function DashboardPage() {
                   >
                     {c.status}
                   </Badge>
-                  <span className="text-sm font-medium group-hover:text-violet-400 transition-colors">{c.title}</span>
+                  <span className="text-sm font-medium group-hover:text-blue-400 transition-colors">{c.title}</span>
                   <span className="text-xs text-muted-foreground">{c.collection}</span>
                 </div>
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -227,7 +227,7 @@ export default function DashboardPage() {
                 <p className="text-lg font-semibold mb-2">No content yet</p>
                 <p className="text-sm mb-4">Create your first article and let AI agents optimize it.</p>
                 <Link href="/editor/new">
-                  <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white">
+                  <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
                     Create First Article
                   </Button>
                 </Link>

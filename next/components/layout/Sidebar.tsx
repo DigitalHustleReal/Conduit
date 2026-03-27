@@ -73,20 +73,20 @@ export function Sidebar() {
   const pct = Math.min((used / limits.aiCalls) * 100, 100);
 
   return (
-    <aside className="w-60 flex flex-col h-full overflow-y-auto shrink-0 border-r border-border bg-gradient-to-b from-[oklch(0.18_0.005_280)] via-[oklch(0.16_0.003_270)] to-[oklch(0.14_0_0)]">
+    <aside className="w-60 flex flex-col h-full overflow-y-auto shrink-0 border-r border-slate-700/30 bg-[#080d1c]">
       {/* Brand */}
-      <div className="p-4 border-b border-border/60 flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-violet-500/20">
+      <div className="p-4 border-b border-slate-700/30 flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-400 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/25">
           {'\u2726'}
         </div>
         <div>
-          <div className="text-sm font-extrabold tracking-tight text-foreground">Conduit</div>
-          <div className="text-[10px] text-muted-foreground font-mono">v8.0</div>
+          <div className="text-sm font-extrabold tracking-tight text-slate-100">Conduit</div>
+          <div className="text-[10px] text-slate-500 font-mono">v8.0</div>
         </div>
       </div>
 
       {/* Workspace */}
-      <div className="mx-3 mt-2.5 mb-1 p-2 bg-muted/50 rounded-lg border border-border/50 text-xs font-semibold truncate text-foreground">
+      <div className="mx-3 mt-2.5 mb-1 p-2 bg-slate-800/40 rounded-lg border border-slate-700/30 text-xs font-semibold truncate text-slate-200">
         {siteName}
       </div>
 
@@ -96,8 +96,8 @@ export function Sidebar() {
           <div key={group.title} className="mb-1">
             <div
               className={cn(
-                'px-4 py-1.5 text-[9px] uppercase tracking-widest text-muted-foreground font-mono',
-                group.collapsible && 'cursor-pointer hover:text-foreground'
+                'px-4 py-1.5 text-[9px] uppercase tracking-widest text-slate-500 font-mono',
+                group.collapsible && 'cursor-pointer hover:text-slate-300'
               )}
               onClick={() => {
                 if (group.collapsible) {
@@ -117,14 +117,14 @@ export function Sidebar() {
                   className={cn(
                     'flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[12.5px] transition-all duration-200 relative',
                     isActive
-                      ? 'bg-violet-500/10 text-violet-400 font-semibold border-l-[3px] border-violet-500 ml-2 pl-3.5'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                      ? 'bg-blue-500/10 text-blue-400 font-semibold border-l-[3px] border-blue-500 ml-2 pl-3.5 shadow-[inset_0_0_12px_rgba(59,130,246,0.06)]'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                   )}
                 >
                   <span className="text-sm">{item.icon}</span>
                   <span className="flex-1">{item.label}</span>
                   {item.pro && (
-                    <span className="text-[8px] font-bold tracking-wider bg-violet-500/20 text-violet-400 border border-violet-500/30 px-1.5 py-0.5 rounded-full uppercase">
+                    <span className="text-[8px] font-bold tracking-wider bg-blue-500/15 text-blue-400 border border-blue-500/25 px-1.5 py-0.5 rounded-full uppercase">
                       Pro
                     </span>
                   )}
@@ -136,21 +136,21 @@ export function Sidebar() {
       </nav>
 
       {/* Footer with credit meter */}
-      <div className="p-3 border-t border-border/60 space-y-2">
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+      <div className="p-3 border-t border-slate-700/30 space-y-2">
+        <div className="flex items-center justify-between text-[10px] text-slate-500">
           <span>AI Credits</span>
           <span className="font-mono">{used}/{limits.aiCalls}</span>
         </div>
-        <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-slate-800/60 rounded-full overflow-hidden">
           <div
             className={cn(
               'h-full rounded-full transition-all duration-500',
-              pct >= 80 ? 'bg-red-500' : pct >= 50 ? 'bg-amber-500' : 'bg-violet-500'
+              pct >= 80 ? 'bg-rose-500' : pct >= 50 ? 'bg-amber-500' : 'bg-gradient-to-r from-blue-500 to-blue-400'
             )}
             style={{ width: `${pct}%` }}
           />
         </div>
-        <div className="text-[10px] text-muted-foreground">
+        <div className="text-[10px] text-slate-500">
           141 agents &middot; 12 APIs
         </div>
       </div>

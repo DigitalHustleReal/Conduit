@@ -22,13 +22,13 @@ const AGENTS = [
 
 const PRICING = [
   { plan: 'Free', price: '$0', period: '/forever', calls: '100 AI calls/mo', features: ['5 articles', '1 team member', 'Basic agents', 'Community support'], cta: 'Start Free', highlight: false, byok: false },
-  { plan: 'Pro', price: '$29', period: '/month', calls: '1,000 AI calls/mo', features: ['Unlimited articles', '5 team members', 'All 113 agents', 'Priority support', 'API access', 'Version history'], cta: 'Start Pro', highlight: true, byok: false },
+  { plan: 'Pro', price: '$29', period: '/month', calls: '1,000 AI calls/mo', features: ['Unlimited articles', '5 team members', 'Full agent suite', 'Priority support', 'API access', 'Version history'], cta: 'Start Pro', highlight: true, byok: false },
   { plan: 'Business', price: '$99', period: '/month', calls: '10,000 AI calls/mo', features: ['Unlimited everything', '15 team members', 'White-label', 'Dedicated support', 'Custom integrations', 'SSO'], cta: 'Start Business', highlight: false, byok: false },
   { plan: 'BYOK', price: '$0', period: '/forever', calls: 'Unlimited (your keys)', features: ['Bring your own API keys', 'Unlimited AI calls', 'All features unlocked', 'Self-serve setup'], cta: 'Get Started', highlight: false, byok: true },
 ];
 
 const FAQ = [
-  { q: 'What is Conduit?', a: 'Conduit is an AI-native content operations platform. It combines a full CMS with 113 autonomous AI agents that handle everything from keyword research to publishing.' },
+  { q: 'What is Conduit?', a: 'Conduit is an AI-native content operations platform. It combines a full CMS with autonomous AI agents that handle everything from keyword research to publishing.' },
   { q: 'Do I need my own AI API keys?', a: 'No. Free, Pro, and Business plans include AI credits. But if you have your own API keys from OpenAI, Anthropic, Google, Mistral, or Groq, you can use them with the BYOK plan for unlimited calls.' },
   { q: 'How is this different from Jasper or Copy.ai?', a: 'Those are AI text generators. Conduit is a complete content operations platform with CMS, pipeline management, SEO scoring, autonomous agents, and publishing workflows.' },
   { q: 'Can I use Conduit as a headless CMS?', a: 'Yes. Conduit exposes REST APIs for all content, collections, and schemas. You can use it with any frontend framework.' },
@@ -310,11 +310,11 @@ export default function LandingPage() {
 
           <h1 className="text-4xl sm:text-5xl lg:text-7xl font-black leading-[1.08] tracking-tight mb-6">
             Your AI Content Team.<br />
-            <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">113 Agents. Zero Hiring.</span>
+            <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">AI agents that work while you sleep.</span>
           </h1>
 
           <p className="text-lg sm:text-xl text-zinc-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-            The first platform where AI agents handle content operations end-to-end&mdash;from keyword research to publishing to performance monitoring.
+            Deploy autonomous AI agents that research, write, optimize, and distribute your content&mdash;around the clock, without supervision.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -341,9 +341,9 @@ export default function LandingPage() {
       <section ref={r2.ref} className={`reveal-base ${r2.cls} bg-zinc-900/60 border-y border-zinc-800/50 py-12 px-6`}>
         <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           {[
-            { num: '113', label: 'AI Agents' },
-            { num: '21', label: 'AI Tools' },
-            { num: '5', label: 'AI Providers' },
+            { num: '24/7', label: 'Autonomous Monitoring' },
+            { num: '5', label: 'AI Providers Built In' },
+            { num: '0', label: 'Manual Work Required' },
             { num: '$0', label: 'To Start' },
           ].map(m => (
             <div key={m.label}>
@@ -366,10 +366,10 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-2 gap-12 items-center mb-24">
             <div>
               <Badge className="mb-4 bg-violet-500/10 text-violet-400 border-violet-500/20">Core Platform</Badge>
-              <h3 className="text-2xl sm:text-3xl font-bold mb-4">113 Autonomous AI Agents</h3>
-              <p className="text-zinc-400 leading-relaxed mb-6">Deploy AI agents that work around the clock. They monitor your content, fix SEO issues, discover keywords, build internal links, and keep your pipeline moving&mdash;all without human intervention.</p>
+              <h3 className="text-2xl sm:text-3xl font-bold mb-4">Autonomous AI Agents</h3>
+              <p className="text-zinc-400 leading-relaxed mb-6">Your agents observe your content, detect issues, and fix them&mdash;automatically. SEO problems get patched. Stale content gets refreshed. Internal links get built. All while you focus on strategy.</p>
               <ul className="space-y-3 text-sm text-zinc-300">
-                {['Work 24/7 without breaks or supervision', 'Heuristic + AI hybrid intelligence', 'Auto-fix SEO issues as they appear', 'Scale from 8 core agents to 113 micro-agents'].map(b => (
+                {['Work 24/7 without breaks or supervision', 'Heuristic + AI hybrid intelligence', 'Auto-fix SEO issues as they appear', 'Core agents plus specialized micro-agents'].map(b => (
                   <li key={b} className="flex items-start gap-2"><span className="text-violet-400 mt-0.5">{'\u2713'}</span>{b}</li>
                 ))}
               </ul>
@@ -445,8 +445,8 @@ const articles = `}<span className="text-violet-400">await</span>{` client.getCo
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-violet-600/[0.03] to-transparent pointer-events-none" />
         <div ref={r4.ref} className={`reveal-base ${r4.cls} max-w-6xl mx-auto relative z-10`}>
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-black mb-3">8 Agents Working While You Sleep</h2>
-            <p className="text-zinc-400 text-lg">Plus 105 micro-agents for specialized tasks</p>
+            <h2 className="text-3xl sm:text-4xl font-black mb-3">Your AI team. Always on.</h2>
+            <p className="text-zinc-400 text-lg">Every content task&mdash;from keyword research to distribution&mdash;handled autonomously.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -500,7 +500,7 @@ const articles = `}<span className="text-violet-400">await</span>{` client.getCo
               <ul className="space-y-3 text-sm text-zinc-300">
                 {[
                   'Full CMS + AI + SEO + Pipeline',
-                  '113 agents handle everything',
+                  'AI agents handle everything autonomously',
                   'One dashboard, zero plugins',
                   'Autonomous \u2014 runs while you sleep',
                   '5 AI providers built in',
@@ -627,7 +627,7 @@ const articles = `}<span className="text-violet-400">await</span>{` client.getCo
         </div>
         <div ref={r9.ref} className={`reveal-base ${r9.cls} max-w-2xl mx-auto text-center relative z-10`}>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">Stop managing tools.<br />Start managing strategy.</h2>
-          <p className="text-zinc-400 text-lg mb-8">Free forever. No credit card. 113 agents ready to work.</p>
+          <p className="text-zinc-400 text-lg mb-8">Free forever. No credit card. Your AI team is ready.</p>
           <Link href="/dashboard">
             <Button size="lg" className="px-10 bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-xl shadow-violet-600/25 hover:shadow-violet-600/40 transition-all border-0 font-semibold">
               Get Started Free &rarr;

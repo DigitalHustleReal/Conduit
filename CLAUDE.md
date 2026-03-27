@@ -1,256 +1,219 @@
 @AGENTS.md
 
-# Conduit Next.js App — AI-Native Content Operations Platform
+# Conduit — AI-Native Content Operations Platform
+
+## What This Is
+Conduit is a production SaaS platform where autonomous AI agents handle the entire content lifecycle — from keyword research to writing, SEO optimization, distribution, and performance monitoring. Built by DigitalHustle.
+
+**Live:** conduit-woad.vercel.app
+**Repo:** github.com/DigitalHustleReal/Conduit
+**Supabase:** swctotzcjhnqyaddqxni.supabase.co
 
 ## Tech Stack
 - **Framework:** Next.js 16.2 (App Router, React 19, Turbopack)
 - **Language:** TypeScript (strict)
 - **State:** Zustand 5 (stores/)
 - **UI:** shadcn/ui 4 + Tailwind CSS 4 + Lucide icons
-- **Database:** Supabase (PostgreSQL + Auth + RLS)
-- **Payments:** Stripe 21 (Checkout + webhooks)
-- **Email:** Resend 6 (transactional)
-- **AI:** Anthropic SDK (Claude) — multi-provider via lib/ai/
-- **Theming:** next-themes + CSS variables (dark/light)
+- **Database:** Supabase (PostgreSQL + Auth + RLS) — 17 tables
+- **Payments:** Stripe 21 (Checkout + webhooks) — pending India invite
+- **Email:** Resend 6 (transactional) — 3 templates
+- **AI:** Anthropic Claude (primary) + OpenAI, Gemini, Mistral, Groq via lib/ai/
+- **Theming:** Custom theme toggle (dark/light/system) with CSS variables
+- **Brand:** Command Center theme — navy (#0a0f1e) + electric blue (#3b82f6)
 
-## File Structure
+## Architecture
 
 ```
-next/
-  app/
-    layout.tsx                  — Root layout (ThemeProvider, Toaster)
-    page.tsx                    — Landing / marketing page
-    (cms)/                      — Authenticated CMS route group
-      layout.tsx                — CMS shell (Sidebar + Topbar + AuthGuard)
-      dashboard/page.tsx        — Main dashboard
-      editor/page.tsx           — Content editor (list view)
-      editor/new/page.tsx       — New content editor
-      collections/page.tsx      — Collection manager
-      ai-studio/page.tsx        — AI Studio (21 tools, prompts)
-      ai-engine/page.tsx        — AI engine config (providers, BYOK)
-      chat/page.tsx             — AI chat interface
-      prompt-library/page.tsx   — Prompt library (built-in + user)
-      seo/page.tsx              — SEO keywords + tracking
-      analytics/page.tsx        — Analytics dashboard
-      pipeline/page.tsx         — Content production pipeline
-      media/page.tsx            — Media library (Pexels/Pixabay/upload/AI)
-      agents/page.tsx           — 8 autonomous AI agents
-      automations/page.tsx      — Automation engine (triggers + actions)
-      webhooks/page.tsx         — Webhook management
-      interlinks/page.tsx       — Internal link builder
-      monetisation/page.tsx     — Affiliate products + ad placements
-      social/page.tsx           — Social distribution (Twitter/LinkedIn)
-      import/page.tsx           — Import hub (Notion/Sheets/CSV/JSON)
-      creator/page.tsx          — Creator Studio hub
-      creator/script/page.tsx   — Script generator
-      creator/shorts/page.tsx   — Shorts/Reels generator
-      creator/research/page.tsx — Topic research
-      creator/seo/page.tsx      — Video SEO
-      visuals/page.tsx          — Visual Studio hub
-      visuals/thumbnails/page.tsx   — Thumbnail generator
-      visuals/featured/page.tsx     — Featured image generator
-      visuals/infographics/page.tsx — Infographic generator
-      prog-seo/page.tsx         — Programmatic SEO
-      geo-seo/page.tsx          — Geo/local SEO
-      localization/page.tsx     — Content localization
-      algo-updates/page.tsx     — Algorithm update tracker
-      templates/page.tsx        — Content templates
-      integrations/page.tsx     — Third-party integrations
-      team/page.tsx             — Team management
-      api-playground/page.tsx   — API playground / headless CMS
-      settings/page.tsx         — Workspace settings
-    api/
-      gsc/auth/route.ts         — Google Search Console OAuth start
-      gsc/callback/route.ts     — GSC OAuth callback
-      gsc/data/route.ts         — GSC performance data fetch
-      gsc/sites/route.ts        — GSC site list
-      social/twitter/route.ts   — Post to Twitter/X
-      social/linkedin/route.ts  — Post to LinkedIn
-      social/auth/[provider]/route.ts     — Social OAuth start
-      social/callback/[provider]/route.ts — Social OAuth callback
-      import/notion/route.ts    — Import from Notion
-      import/notion/auth/route.ts      — Notion OAuth start
-      import/notion/callback/route.ts  — Notion OAuth callback
-      import/sheets/route.ts    — Import from Google Sheets
-      revalidate/route.ts       — On-demand ISR revalidation
-    privacy/page.tsx            — Privacy policy (footer)
-    terms/page.tsx              — Terms of service (footer)
-    security/page.tsx           — Security page (footer)
-    about/page.tsx              — About page (footer)
-    contact/page.tsx            — Contact page (footer)
-    blog/page.tsx               — Blog (footer)
-    changelog/page.tsx          — Changelog (footer)
-    docs/page.tsx               — Documentation hub (footer)
-    docs/api/page.tsx           — API docs (footer)
-    docs/agents/page.tsx        — Agent docs (footer)
-  components/
-    ui/                         — shadcn/ui primitives (button, card, input, badge, progress, sonner)
-    layout/
-      Sidebar.tsx               — Two-tier collapsible nav
-      Topbar.tsx                — Top bar (search, credits, theme, user)
-    AuthGuard.tsx               — Redirect to login if not authenticated
-    OnboardingGate.tsx          — Show onboarding wizard for new users
-    OnboardingWizard.tsx        — Step-by-step onboarding flow
-    ThemeToggle.tsx             — Dark/light mode toggle
-    HeroDemo.tsx                — Animated product demo for landing page
-  lib/
-    utils.ts                    — cn() helper (clsx + tailwind-merge)
-    theme.ts                    — Theme utilities
-    credits.ts                  — Plan limits + credit deduction
-    social.ts                   — Social posting helpers (Twitter/LinkedIn)
-    import.ts                   — Import logic (Notion/Sheets/CSV/JSON)
-    gsc.ts                      — Google Search Console client
-    headless-client.ts          — Headless CMS API client
-    ai/
-      providers.ts              — AI provider registry (Claude, GPT-4, Gemini, Mistral, Groq)
-      call-ai.ts                — Unified AI dispatcher
-    scoring/
-      seo-score.ts              — Heuristic SEO scoring
-      ai-score.ts               — AI-powered content scoring
-      readability.ts            — Flesch-Kincaid readability
-      analyze.ts                — Combined content analysis
-    supabase/
-      client.ts                 — Browser Supabase client
-      server.ts                 — Server-side Supabase client
-      auth.ts                   — Auth helpers (session, user)
-      sync.ts                   — Data sync (localStorage + Supabase)
-  stores/
-    workspace.ts                — Zustand workspace store (content, collections, keywords, settings)
-  types/
-    agent.ts                    — Agent type definitions
-    content.ts                  — Content type definitions
-    workspace.ts                — Workspace type definitions
-  public/                       — Static assets
-  docs/                         — Internal documentation
+Root (Next.js App Router)
+├── app/
+│   ├── layout.tsx                  — Root layout (theme script, Toaster)
+│   ├── page.tsx                    — Landing page (hero, features, pricing, FAQ)
+│   ├── (cms)/                      — Authenticated CMS route group
+│   │   ├── layout.tsx              — CMS shell (AuthGuard + OnboardingGate + Sidebar + Topbar)
+│   │   ├── dashboard/              — Mission control dashboard
+│   │   ├── editor/                 — Content editor (list + new/edit)
+│   │   ├── collections/            — Collection schemas
+│   │   ├── ai-studio/              — 21 AI tools (wired to callAI)
+│   │   ├── ai-engine/              — Provider config (5 providers, BYOK)
+│   │   ├── chat/                   — Multi-turn AI chat with workspace context
+│   │   ├── prompt-library/         — 33 built-in prompts
+│   │   ├── seo/                    — SEO center + GSC real data
+│   │   ├── analytics/              — Analytics + GSC search console tab
+│   │   ├── pipeline/               — Kanban board (Backlog→Writing→Review→Published)
+│   │   ├── media/                  — Media library (upload, drag-drop)
+│   │   ├── agents/                 — Agent dashboard (8 core + hierarchy)
+│   │   ├── automations/            — Event-driven automation rules
+│   │   ├── webhooks/               — Webhook management
+│   │   ├── interlinks/             — Internal link builder + orphan detection
+│   │   ├── monetisation/           — Affiliate products + ad placements
+│   │   ├── social/                 — Social posting (Twitter/LinkedIn)
+│   │   ├── import/                 — Import hub (Notion/Sheets/CSV/JSON)
+│   │   ├── creator/                — Creator Studio (scripts, shorts, research, video SEO)
+│   │   ├── visuals/                — Visual Studio (thumbnails, featured, infographics)
+│   │   ├── prog-seo/               — Programmatic SEO
+│   │   ├── geo-seo/                — GEO/AI search optimization
+│   │   ├── localization/           — Multi-language (16 languages)
+│   │   ├── algo-updates/           — Google algorithm tracker
+│   │   ├── templates/              — Content templates (8 types)
+│   │   ├── integrations/           — Third-party integrations (9 services)
+│   │   ├── team/                   — Team management + roles
+│   │   ├── api-playground/         — Headless CMS API tester
+│   │   └── settings/               — Workspace settings + billing
+│   ├── admin/                      — Password-protected admin panel
+│   │   ├── layout.tsx              — Admin shell (password: conduit-admin-2026)
+│   │   ├── page.tsx                — Overview dashboard
+│   │   ├── users/                  — All platform users
+│   │   ├── workspaces/             — All workspaces
+│   │   ├── content/                — All content across workspaces
+│   │   ├── ai-usage/               — AI call analytics
+│   │   ├── system/                 — DB health + env check
+│   │   └── finance/                — Revenue, expenses, customers, projections
+│   ├── api/                        — 25 API routes
+│   │   ├── ai-proxy/               — AI proxy (JWT auth, quota, multi-provider)
+│   │   ├── content/                — Public headless CMS API
+│   │   ├── checkout/               — Stripe checkout session
+│   │   ├── stripe-webhook/         — Stripe webhook handler
+│   │   ├── email/                  — Transactional emails (Resend)
+│   │   ├── rss/                    — RSS feed
+│   │   ├── sitemap/                — XML sitemap
+│   │   ├── schema/                 — JSON-LD schema
+│   │   ├── search/                 — Full-text search
+│   │   ├── export/                 — Data export (CSV/JSON)
+│   │   ├── notify/                 — Webhook notifications (HMAC signed)
+│   │   ├── preview/                — Draft preview
+│   │   ├── revalidate/             — ISR revalidation endpoint
+│   │   ├── gsc/                    — Google Search Console (auth, callback, data, sites)
+│   │   ├── social/                 — Social posting (twitter, linkedin, auth, callback)
+│   │   ├── import/                 — Notion + Sheets import
+│   │   └── admin/                  — Admin API (stats, users, workspaces, content, finance)
+│   ├── privacy/                    — Privacy policy
+│   ├── terms/                      — Terms of service
+│   ├── security/                   — Security page
+│   ├── about/                      — About page
+│   ├── contact/                    — Contact form
+│   ├── blog/                       — Blog (coming soon)
+│   ├── changelog/                  — Version changelog
+│   └── docs/                       — Documentation (hub, API ref, agents)
+├── components/
+│   ├── ui/                         — shadcn/ui (button, card, input, badge, progress, sonner)
+│   ├── layout/
+│   │   ├── Sidebar.tsx             — Two-tier collapsible nav (Command Center style)
+│   │   └── Topbar.tsx              — Breadcrumbs, credits, theme toggle, user
+│   ├── AuthGuard.tsx               — Supabase auth gate (Google OAuth + email/password)
+│   ├── OnboardingGate.tsx          — Triggers onboarding for new workspaces
+│   ├── OnboardingWizard.tsx        — 5-step guided setup
+│   ├── ThemeToggle.tsx             — Dark/Light/System with SVG icons
+│   └── HeroDemo.tsx                — 5-phase animated product demo (15s loop)
+├── lib/
+│   ├── utils.ts                    — cn() helper
+│   ├── theme.ts                    — Theme persistence (localStorage)
+│   ├── credits.ts                  — Plan limits + credit deduction
+│   ├── social.ts                   — Social post generation + scheduling
+│   ├── import.ts                   — CSV/JSON client-side parsers + Notion/Sheets helpers
+│   ├── gsc.ts                      — Google Search Console client
+│   ├── headless-client.ts          — ConduitClient SDK for any frontend
+│   ├── stripe.ts                   — Stripe checkout + portal helpers
+│   ├── ai/
+│   │   ├── providers.ts            — 5 AI providers (Claude, GPT-4, Gemini, Mistral, Groq)
+│   │   └── call-ai.ts             — Unified dispatcher (streaming, BYOK, session auth)
+│   ├── scoring/
+│   │   ├── seo-score.ts            — Dynamic SEO scoring (benchmarks against workspace)
+│   │   ├── ai-score.ts             — AI content quality scoring
+│   │   ├── readability.ts          — Flesch-Kincaid readability
+│   │   └── analyze.ts              — Combined analysis
+│   └── supabase/
+│       ├── client.ts               — LAZY browser client (prevents SSG crash)
+│       ├── server.ts               — Server-side client (service role)
+│       ├── auth.ts                 — Auth helpers (Google, email, workspace bootstrap)
+│       └── sync.ts                 — Upsert sync (content, keywords, collections, media, pipeline)
+├── stores/
+│   └── workspace.ts                — Zustand store (localStorage + Supabase sync)
+├── types/
+│   ├── agent.ts                    — Agent types (tier, triggers, cooldown, observe)
+│   ├── content.ts                  — Content types
+│   └── workspace.ts                — Workspace + settings types
+├── legacy/                         — Old HTML files (app.html, admin.html, index.html)
+├── wordpress-plugin/               — WordPress sync plugin (7 files)
+├── docs/                           — Internal docs (HEADLESS-CMS.md)
+└── supabase-schema.sql             — Full database schema (17 tables + RLS)
 ```
+
+## Agent System (HTML legacy — app.html)
+The HTML version has the full autonomous agent system:
+- **121 micro-agents** with tier (1=human approval, 2=auto-apply), triggers, cooldown, observe
+- **Event bus:** dispatchAgentEvent → processAgentQueue (budget-gated)
+- **Lifecycle events:** content.created, content.updated, content.published, keyword.added, daily, weekly, monthly
+- **Hierarchy:** Conductor → 4 Directors (SEO, Content, Growth, Technical) → Workers
+- **Autopilot mode:** daily budget, auto-scheduling
+- **Feedback flywheel:** agent effectiveness tracking, memory, chains
 
 ## Coding Rules
 
+### Critical
+- **NEVER hardcode dark colors** — use CSS variables (bg-background, text-foreground, bg-card, bg-muted, border-border, text-muted-foreground)
+- **Supabase client is LAZY** — always use `getSupabase()`, never import `createClient` at module level
+- **Credits deducted AFTER success** — never before the AI call
+- `'use client'` on ALL pages with useState/useEffect/Zustand
+
 ### General
-- Use `'use client'` directive on ALL interactive pages and components (anything with useState, useEffect, event handlers, Zustand)
-- Server components are the default in Next.js App Router; only add `'use client'` when needed
-- Use CSS variables for theming (dark/light) — never hardcode colors
-- All API routes go in `app/api/` as `route.ts` files
-- Use `next-themes` ThemeProvider for dark/light mode — do not roll custom theme logic
-- Toast notifications via `sonner` — use `toast()` from sonner, not custom toasts
+- shadcn/ui for all UI primitives
+- Lucide icons only
+- Tailwind CSS 4 — no CSS modules
+- `cn()` from `lib/utils.ts` for class merging
+- Toast via `sonner` — `toast.success()`, `toast.error()`
+- API routes: try/catch, return `{ data?, error? }`, handle OPTIONS for CORS
 
-### TypeScript
-- Strict mode enabled — no `any` unless absolutely necessary
-- Define types in `types/` for shared interfaces
-- Use Zod or manual validation in API routes
+### State
+- Zustand for client state (workspace.ts)
+- localStorage as fallback when Supabase unavailable
+- All Supabase sync is async, non-blocking, fire-and-forget with console.warn on failure
 
-### Components
-- shadcn/ui for all UI primitives (Button, Card, Input, Badge, Progress)
-- Lucide icons only — do not use other icon libraries
-- Component files use PascalCase: `AuthGuard.tsx`, `ThemeToggle.tsx`
-- Keep page components in their page.tsx files; extract reusable pieces to `components/`
+## Environment Variables (Vercel)
 
-### State Management
-- Zustand for global client state (workspace data, user preferences)
-- React state (useState) for local component state
-- Supabase for persistent data — sync via `lib/supabase/sync.ts`
+**Required (set, all environments):**
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `ANTHROPIC_API_KEY`
 
-### API Routes
-- All API routes must handle errors with try/catch and return appropriate status codes
-- Use `lib/supabase/server.ts` for server-side Supabase access
-- Validate request bodies before processing
-- Return JSON responses with consistent shape: `{ data?, error? }`
+**Optional (add when ready):**
+- `ADMIN_PASSWORD` (default: conduit-admin-2026)
+- Stripe: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_BUSINESS_PRICE_ID`
+- Resend: `RESEND_API_KEY`, `RESEND_FROM`
+- Google: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- Twitter: `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_REFRESH_TOKEN`
+- LinkedIn: `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_ACCESS_TOKEN`
+- Notion: `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`
+- `CONDUIT_WEBHOOK_SECRET`
 
-### Styling
-- Tailwind CSS 4 with PostCSS — no CSS modules
-- Use `cn()` from `lib/utils.ts` to merge class names
-- CSS variables defined in root layout for theme colors
-- Responsive design: mobile-first with sm/md/lg breakpoints
+## Database (17 Tables)
+profiles, workspaces, workspace_members, collections, content, content_versions, keywords, media, pipeline, affiliate_products, webhooks, webhook_logs, audit_log, analytics_events, social_posts, import_history, agent_suggestions
 
-## Environment Variables
+All with RLS policies scoped to workspace membership.
 
-| Variable | Required | Used By |
-|----------|----------|---------|
-| SUPABASE_URL | Yes | Server + client |
-| SUPABASE_ANON_KEY | Yes | Client (public) |
-| SUPABASE_SERVICE_ROLE_KEY | Yes | Server only |
-| ANTHROPIC_API_KEY | For platform AI | AI routes |
-| STRIPE_SECRET_KEY | For payments | Stripe routes |
-| STRIPE_PUBLISHABLE_KEY | For payments | Client checkout |
-| STRIPE_WEBHOOK_SECRET | For payments | Webhook verification |
-| STRIPE_PRO_PRICE_ID | For payments | Checkout sessions |
-| STRIPE_BUSINESS_PRICE_ID | For payments | Checkout sessions |
-| RESEND_API_KEY | For email | Email routes |
-| RESEND_FROM | For email | Email sender address |
-| SITE_URL | Yes | Redirects, emails |
-| SITE_NAME | Yes | Branding |
-| NEXT_PUBLIC_APP_URL | Yes | Client-side links |
-| NEXT_PUBLIC_SUPABASE_URL | Yes | Client Supabase |
-| NEXT_PUBLIC_SUPABASE_ANON_KEY | Yes | Client Supabase |
-| GOOGLE_CLIENT_ID | For GSC | GSC OAuth |
-| GOOGLE_CLIENT_SECRET | For GSC | GSC OAuth |
-| GOOGLE_SHEETS_API_KEY | For import | Sheets import |
-| TWITTER_CLIENT_ID | For social | Twitter OAuth |
-| TWITTER_CLIENT_SECRET | For social | Twitter OAuth |
-| TWITTER_ACCESS_TOKEN | For social | Twitter posting |
-| TWITTER_REFRESH_TOKEN | For social | Twitter token refresh |
-| LINKEDIN_CLIENT_ID | For social | LinkedIn OAuth |
-| LINKEDIN_CLIENT_SECRET | For social | LinkedIn OAuth |
-| LINKEDIN_ACCESS_TOKEN | For social | LinkedIn posting |
-| NOTION_CLIENT_ID | For import | Notion OAuth |
-| NOTION_CLIENT_SECRET | For import | Notion OAuth |
-| CONDUIT_WEBHOOK_SECRET | For webhooks | Webhook signing |
+## What's Built (Complete)
+- 58 pages (37 CMS + 11 admin + 10 public/footer)
+- 25 API routes
+- 121 autonomous AI agents (event-driven, tiered, budget-gated)
+- 5-phase animated product demo on landing page
+- Command Center theme (navy + electric blue, dark/light/system)
+- Premium pricing with annual/monthly toggle
+- Mission control dashboard with glass-morphism cards
+- Supabase auth (Google OAuth + email/password) + data sync
+- Google Search Console integration (real ranking data)
+- Social media posting (Twitter/LinkedIn OAuth + API)
+- Import hub (Notion/Sheets/CSV/JSON with mapping UI)
+- 5-step onboarding wizard
+- WordPress plugin (sync Conduit → WordPress)
+- Headless CMS SDK (ConduitClient for any frontend)
+- Content editor with live SEO/AI/readability scoring
+- Admin panel with finance dashboard (MRR, projections, expenses)
 
-## Database (Supabase — 17 Tables)
-
-| # | Table | Purpose |
-|---|-------|---------|
-| 1 | profiles | User profiles (mirrors auth.users) |
-| 2 | workspaces | Workspace config, plan, credits, Stripe IDs |
-| 3 | workspace_members | Team membership (admin/editor/viewer) |
-| 4 | collections | Content collection schemas |
-| 5 | content | Articles, pages, posts |
-| 6 | content_versions | Version history (10 per item) |
-| 7 | keywords | SEO keyword tracking |
-| 8 | media | Media library (uploads, stock, AI) |
-| 9 | pipeline | Content production workflow stages |
-| 10 | affiliate_products | Monetisation product catalog |
-| 11 | webhooks | Webhook endpoint config |
-| 12 | webhook_logs | Webhook delivery logs |
-| 13 | audit_log | User action audit trail |
-| 14 | analytics_events | Page views, events, visitor data |
-| 15 | social_posts | Social distribution queue (Twitter/LinkedIn) |
-| 16 | import_history | Content import tracking (Notion/Sheets/CSV/JSON) |
-| 17 | agent_suggestions | AI agent suggestions for human review |
-
-All tables have RLS policies scoped to workspace membership.
-
-## What's Built
-- 48 pages (37 CMS pages + 11 marketing/footer pages)
-- 13 API routes (GSC, social posting, import, revalidation)
-- Two-tier collapsible sidebar navigation
-- AI Studio with 21 tools and prompt library
-- Creator Studio (YouTube scripts, Shorts, research, video SEO)
-- Visual Studio (thumbnails, featured images, infographics)
-- Media library (Pexels/Pixabay/upload/AI generation)
-- Monetisation (affiliate products, ad placements)
-- Content editor with SEO + AI + readability scoring
-- Internal link builder (orphan detection + AI suggestions)
-- 8 autonomous AI agents
-- Automation engine (triggers + actions)
-- Pipeline / Kanban workflow
-- Analytics dashboard
-- Social distribution (Twitter/LinkedIn auto-post)
-- Import hub (Notion/Sheets/CSV/JSON)
-- Onboarding wizard for new users
-- Google Search Console integration
-- Programmatic SEO + Geo SEO + Localization
-- Algorithm update tracker
-- Supabase auth (Google OAuth + email/password)
-- Stripe checkout (Pro + Business plans)
-- Dark/light theme with CSS variables
-- Headless CMS API client
-
-## What's Planned
-1. 100+ micro-agents (specific task agents for every content operation)
-2. Meta-agents (agents that monitor and optimize other agents)
-3. Schema markup generator (auto JSON-LD for all content types)
-4. PageSpeed Insights (Core Web Vitals in Analytics)
-5. White-label mode (custom branding per workspace)
-6. Marketplace (premium prompts, agent templates, schemas)
-7. WordPress plugin sync (already built for legacy app.html, needs Next.js integration)
+## What's Next (Priority Order)
+1. **Fix admin login** — ADMIN_PASSWORD env var in Vercel
+2. **Razorpay integration** — replace Stripe for India (Stripe invite-only)
+3. **Real product demo video** — screen recording of actual CMS workflow
+4. **First 10 users** — post on IndieHackers, Reddit, Twitter
+5. **Connect investingpro.in** — headless CMS webhook + ISR
+6. **WordPress.org submission** — distribute the plugin
+7. **Marketplace** — premium prompt packs, agent templates
+8. **White-label mode** — agency rebranding

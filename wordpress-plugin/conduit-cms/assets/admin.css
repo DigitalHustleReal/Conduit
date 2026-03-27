@@ -1,0 +1,136 @@
+/**
+ * Conduit CMS — Admin Settings Styles
+ *
+ * @package Conduit_CMS
+ * @since   1.0.0
+ */
+
+/* Layout grid */
+.conduit-cms-grid {
+	display: grid;
+	grid-template-columns: 1fr 340px;
+	gap: 24px;
+	margin-top: 20px;
+}
+
+@media (max-width: 960px) {
+	.conduit-cms-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* Main column */
+.conduit-cms-main {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 24px 28px;
+}
+
+.conduit-cms-main h2 {
+	margin-top: 1.5em;
+	font-size: 1.15em;
+}
+
+.conduit-cms-main hr {
+	border: none;
+	border-top: 1px solid #e0e0e0;
+	margin: 24px 0;
+}
+
+.conduit-cms-main code {
+	display: inline-block;
+	padding: 8px 14px;
+	background: #f0f0f1;
+	border-radius: 4px;
+	font-size: 13px;
+	user-select: all;
+	word-break: break-all;
+}
+
+/* Sidebar cards */
+.conduit-cms-sidebar .conduit-cms-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 18px 20px;
+	margin-bottom: 16px;
+}
+
+.conduit-cms-sidebar .conduit-cms-card h3 {
+	margin: 0 0 12px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid #e0e0e0;
+	font-size: 14px;
+}
+
+.conduit-cms-sidebar .button {
+	text-align: center;
+}
+
+.conduit-last-sync {
+	margin: 12px 0 0;
+	color: #646970;
+	font-size: 12px;
+	text-align: center;
+}
+
+/* Sync log */
+.conduit-sync-log {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	max-height: 360px;
+	overflow-y: auto;
+}
+
+.conduit-sync-log li {
+	padding: 8px 10px;
+	margin: 0;
+	border-bottom: 1px solid #f0f0f1;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.conduit-sync-log li:last-child {
+	border-bottom: none;
+}
+
+.conduit-log-time {
+	display: block;
+	color: #8c8f94;
+	font-size: 11px;
+	margin-bottom: 2px;
+}
+
+.conduit-log-success .conduit-log-msg {
+	color: #00a32a;
+}
+
+.conduit-log-error .conduit-log-msg {
+	color: #d63638;
+}
+
+.conduit-log-skipped .conduit-log-msg {
+	color: #996800;
+}
+
+.conduit-empty-log {
+	color: #8c8f94;
+	font-style: italic;
+	margin: 0;
+}
+
+/* Form tweaks */
+.conduit-cms-wrap .form-table th {
+	width: 160px;
+}
+
+.conduit-cms-wrap .form-table input.regular-text {
+	width: 100%;
+	max-width: 400px;
+}
+
+.conduit-cms-wrap .form-table select {
+	min-width: 200px;
+}

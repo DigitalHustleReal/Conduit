@@ -50,7 +50,11 @@ interface WorkspaceStore {
   // Analytics
   analyticsEvents: Array<{ id: number; type: string; contentId?: string; ts: number; meta?: Record<string, unknown> }>;
 
+  // Onboarding
+  onboardingComplete: boolean;
+
   // Actions
+  setOnboardingComplete: (value: boolean) => void;
   setAuth: (userId: string | null, isAuthenticated: boolean) => void;
   setWorkspace: (id: string, name: string) => void;
   setPlan: (plan: 'free' | 'pro' | 'business') => void;
@@ -155,10 +159,13 @@ export const useWorkspace = create<WorkspaceStore>()(
       autopilot: DEFAULT_AUTOPILOT,
       contentHistory: {},
       analyticsEvents: [],
+      onboardingComplete: false,
 
       // -----------------------------------------------------------------------
       // Actions
       // -----------------------------------------------------------------------
+
+      setOnboardingComplete: (value) => set({ onboardingComplete: value }),
 
       setAuth: (userId, isAuthenticated) => set({ userId, isAuthenticated }),
 
@@ -350,6 +357,7 @@ export const useWorkspace = create<WorkspaceStore>()(
         agentMemory: state.agentMemory,
         autopilot: state.autopilot,
         contentHistory: state.contentHistory,
+        onboardingComplete: state.onboardingComplete,
       }),
     }
   )

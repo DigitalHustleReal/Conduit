@@ -36,6 +36,7 @@ const NAV_GROUPS: NavGroup[] = [
   { title: 'Content', items: [
     { id: 'collections', icon: '\uD83D\uDDC2', label: 'Collections', href: '/collections' },
     { id: 'editor', icon: '\uD83D\uDCC4', label: 'Content', href: '/editor' },
+    { id: 'import', icon: '\uD83D\uDCE5', label: 'Import', href: '/import' },
     { id: 'media', icon: '\uD83D\uDDBC', label: 'Media Library', href: '/media' },
     { id: 'pipeline', icon: '\uD83D\uDDC3', label: 'Pipeline', href: '/pipeline' },
   ]},

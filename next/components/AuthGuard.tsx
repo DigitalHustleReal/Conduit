@@ -24,6 +24,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const setWorkspace = useWorkspace((s) => s.setWorkspace);
   const setPlan = useWorkspace((s) => s.setPlan);
   const loadFromSupabase = useWorkspace((s) => s.loadFromSupabase);
+  const setOnboardingComplete = useWorkspace((s) => s.setOnboardingComplete);
 
   useEffect(() => {
     // If Supabase is not configured, run in localStorage-only mode
@@ -54,6 +55,12 @@ export function AuthGuard({ children }: AuthGuardProps) {
         setWorkspace(ws.id, ws.name);
         setPlan(ws.plan);
         await loadFromSupabase(ws.id);
+
+        // Detect new workspace (no content) and trigger onboarding
+        const storeContent = useWorkspace.getState().content;
+        if (storeContent.length === 0) {
+          setOnboardingComplete(false);
+        }
       }
     }
 

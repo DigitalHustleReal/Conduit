@@ -24,6 +24,8 @@ import type { RepurposedContent, RepurposeConfig } from '@/lib/agents/repurposer
 import { getDefaultRepurposeConfig } from '@/lib/agents/repurposer';
 import type { PostingCalendar, ScheduledPost } from '@/lib/agents/social-scheduler';
 import { getDefaultCalendar } from '@/lib/agents/social-scheduler';
+import type { CostEntry } from '@/lib/seo/budget-governor';
+import { getCostSummary as computeCostSummary } from '@/lib/seo/budget-governor';
 import {
   loadWorkspaceData,
   syncContent,
@@ -34,6 +36,7 @@ import {
   deleteItem,
   logAudit,
 } from '@/lib/supabase/sync';
+import type { PipelineEvent } from '@/lib/pipeline/stream';
 import type { QueueItem, QueueItemType } from '@/lib/autopilot/queue';
 import {
   createQueueItem,
@@ -112,6 +115,12 @@ interface WorkspaceStore {
   pipelinePreset: string;
   pipelineNodeConfig: Record<string, { enabled: boolean; order: number }>;
 
+  // Pipeline stream events (last 50, persisted)
+  pipelineEvents: PipelineEvent[];
+
+  // Budget governor (real USD cost tracking)
+  costEntries: CostEntry[];
+
   // Business profile (set during onboarding)
   domain: string;
   niche: string;
@@ -178,6 +187,10 @@ interface WorkspaceStore {
   markAllNotificationsRead: () => void;
   clearOldNotifications: () => void;
 
+  // Pipeline event actions
+  addPipelineEvent: (event: PipelineEvent) => void;
+  clearPipelineEvents: () => void;
+
   // Publish actions
   setPublishLimits: (limits: Partial<PublishLimits>) => void;
   addPublishLog: (entry: PublishLogEntry) => void;
@@ -190,6 +203,10 @@ interface WorkspaceStore {
   addScheduledPosts: (posts: ScheduledPost[]) => void;
   updatePostStatus: (postId: string, status: ScheduledPost['status']) => void;
   setSocialCalendarRules: (rules: Partial<PostingCalendar['rules']>) => void;
+
+  // Budget governor actions
+  addCostEntry: (entry: CostEntry) => void;
+  getCostSummary: () => { today: number; week: number; month: number; total: number; byType: Record<string, number> };
 
   // Review queue actions
   addToQueue: (item: Omit<QueueItem, 'id' | 'status' | 'createdAt'>) => QueueItem;
@@ -301,6 +318,12 @@ export const useWorkspace = create<WorkspaceStore>()(
       // Pipeline builder
       pipelinePreset: 'full-autopilot',
       pipelineNodeConfig: {},
+
+      // Pipeline stream events
+      pipelineEvents: [],
+
+      // Budget governor
+      costEntries: [],
 
       // Business profile
       domain: '',
@@ -510,6 +533,21 @@ export const useWorkspace = create<WorkspaceStore>()(
           ),
         };
       }),
+
+      addPipelineEvent: (event) => set((s) => ({
+        pipelineEvents: [...s.pipelineEvents, event].slice(-50),
+      })),
+
+      clearPipelineEvents: () => set({ pipelineEvents: [] }),
+
+      // Budget governor actions
+      addCostEntry: (entry) => set((s) => ({
+        costEntries: [...s.costEntries, entry].slice(-2000), // keep last 2000 entries
+      })),
+
+      getCostSummary: () => {
+        return computeCostSummary(get().costEntries);
+      },
 
       setPublishLimits: (limits) => set((s) => ({
         publishLimits: { ...s.publishLimits, ...limits },
@@ -795,6 +833,8 @@ export const useWorkspace = create<WorkspaceStore>()(
         onboardingComplete: state.onboardingComplete,
         pipelinePreset: state.pipelinePreset,
         pipelineNodeConfig: state.pipelineNodeConfig,
+        pipelineEvents: state.pipelineEvents,
+        costEntries: state.costEntries,
         domain: state.domain,
         niche: state.niche,
         targetAudience: state.targetAudience,

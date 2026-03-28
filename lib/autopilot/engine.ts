@@ -21,6 +21,9 @@ import {
   SEO_OPTIMIZATION_PROMPT,
   PERFORMANCE_ANALYSIS_PROMPT,
 } from './prompts';
+import { getGoogleSuggestions, expandKeyword } from '@/lib/seo/google-autocomplete';
+import { scoreKeyword } from '@/lib/seo/keyword-brain';
+import type { AutocompleteResult } from '@/lib/seo/google-autocomplete';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -194,13 +197,54 @@ function countWords(text: string): number {
 
 /**
  * Discover keyword opportunities for the given niche.
- * Uses one AI credit per call and returns up to 10 keywords.
+ *
+ * Strategy (ported from InvestingPro):
+ * 1. FIRST: Get REAL suggestions from Google Autocomplete (FREE, 0 credits)
+ * 2. Score them with Keyword Brain heuristic (0 credits)
+ * 3. THEN: Use AI to discover additional niche-specific keywords (1 credit)
+ * 4. Merge and deduplicate, returning the best opportunities
  */
 export async function discoverKeywords(
   config: AutopilotEngineConfig,
   existingKeywords: string[],
   settings: Record<string, string> = {},
 ): Promise<KeywordSuggestion[]> {
+  const existingLower = new Set(existingKeywords.map((k) => k.toLowerCase()));
+  const results: KeywordSuggestion[] = [];
+
+  // --- Step 1: Get REAL data from Google Autocomplete (FREE) ---
+  try {
+    const googleData = await expandKeyword(config.niche);
+    const existingTitles = existingKeywords; // use as proxy for existing content titles
+
+    for (const suggestion of googleData.suggestions) {
+      const kwLower = suggestion.keyword.toLowerCase();
+      if (existingLower.has(kwLower)) continue;
+
+      const scored = scoreKeyword(
+        suggestion.keyword,
+        estimateSiteDA(existingKeywords.length),
+        existingTitles,
+        suggestion.position,
+      );
+
+      if (scored.decision !== 'SKIP') {
+        results.push({
+          keyword: suggestion.keyword,
+          estimatedVolume: scored.searchVolume >= 1000 ? 'high' : scored.searchVolume >= 300 ? 'medium' : 'low',
+          estimatedDifficulty: scored.keywordDifficulty >= 60 ? 'high' : scored.keywordDifficulty >= 30 ? 'medium' : 'low',
+          intent: scored.intent,
+          reason: `[Google Autocomplete] ${scored.reason}`,
+          score: scored.rankabilityScore,
+        });
+        existingLower.add(kwLower);
+      }
+    }
+  } catch {
+    // Google Autocomplete failed — continue with AI only
+  }
+
+  // --- Step 2: AI-powered discovery for niche-specific keywords (1 credit) ---
   const prompt = fillPrompt(KEYWORD_DISCOVERY_PROMPT, {
     niche: config.niche,
     audience: config.targetAudience,
@@ -211,19 +255,40 @@ export async function discoverKeywords(
     existingKeywords: existingKeywords.length > 0 ? existingKeywords.join(', ') : 'none yet',
   });
 
-  const raw = await callAI(prompt, {
-    system: 'You are an SEO keyword research expert. Return ONLY valid JSON arrays.',
-    maxTokens: 2000,
-  }, settings);
+  try {
+    const raw = await callAI(prompt, {
+      system: 'You are an SEO keyword research expert. Return ONLY valid JSON arrays.',
+      maxTokens: 2000,
+    }, settings);
 
-  const parsed = safeParseJSON<KeywordSuggestion[]>(raw);
-  if (!parsed || !Array.isArray(parsed)) return [];
+    const parsed = safeParseJSON<KeywordSuggestion[]>(raw);
+    if (parsed && Array.isArray(parsed)) {
+      for (const kw of parsed) {
+        if (kw.keyword && !existingLower.has(kw.keyword.toLowerCase())) {
+          results.push(kw);
+          existingLower.add(kw.keyword.toLowerCase());
+        }
+      }
+    }
+  } catch {
+    // AI discovery failed — return what we have from Google
+  }
 
-  // Filter out any that match existing keywords (case-insensitive)
-  const existingLower = new Set(existingKeywords.map((k) => k.toLowerCase()));
-  return parsed
-    .filter((k) => k.keyword && !existingLower.has(k.keyword.toLowerCase()))
-    .slice(0, 10);
+  // Sort by score descending and cap at 15
+  return results
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 15);
+}
+
+/** Estimate site DA from content count (rough heuristic). */
+function estimateSiteDA(contentCount: number): number {
+  if (contentCount >= 500) return 50;
+  if (contentCount >= 200) return 40;
+  if (contentCount >= 100) return 35;
+  if (contentCount >= 50) return 30;
+  if (contentCount >= 20) return 25;
+  if (contentCount >= 10) return 20;
+  return 15;
 }
 
 /**

@@ -9,6 +9,8 @@ import { isGSCConnected, fetchGSCData, dateRangeFromLabel } from '@/lib/gsc';
 import type { GSCQuery } from '@/lib/gsc';
 import { SeedUploader } from '@/components/SeedUploader';
 import type { SeedData } from '@/lib/autopilot/seed';
+import { fetchSuggestionsClient, type AutocompleteResult } from '@/lib/seo/google-autocomplete';
+import { scoreKeyword, rankKeywords, type RankedKeyword } from '@/lib/seo/keyword-brain';
 
 function scoreColor(score: number) {
   if (score >= 80) return 'text-green-600';
@@ -27,10 +29,64 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | '
   tracked: 'secondary', top5: 'default', top10: 'default', top20: 'outline', opportunity: 'secondary', lost: 'destructive',
 };
 
+const DECISION_COLORS: Record<string, string> = {
+  WRITE: 'text-green-600',
+  SKIP: 'text-red-500',
+  CONSIDER: 'text-yellow-600',
+};
+
 export default function SEOCenterPage() {
-  const { content, keywords, settings } = useWorkspace();
+  const { content, keywords, settings, niche } = useWorkspace();
   const addKeyword = useWorkspace((s) => s.addKeyword);
   const [showSeedUpload, setShowSeedUpload] = useState(false);
+
+  // Google Discover state
+  const [googleQuery, setGoogleQuery] = useState('');
+  const [googleResults, setGoogleResults] = useState<RankedKeyword[]>([]);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [showGoogleDiscover, setShowGoogleDiscover] = useState(false);
+
+  const handleGoogleDiscover = useCallback(async () => {
+    const query = googleQuery.trim() || niche || '';
+    if (!query) return;
+
+    setGoogleLoading(true);
+    try {
+      const suggestions = await fetchSuggestionsClient(query);
+      const existingTitles = content.map((c) => c.title);
+      const contentCount = content.length;
+      const siteDA = contentCount >= 500 ? 50 : contentCount >= 200 ? 40 : contentCount >= 100 ? 35 : contentCount >= 50 ? 30 : contentCount >= 20 ? 25 : contentCount >= 10 ? 20 : 15;
+
+      const positions: Record<string, number> = {};
+      for (const s of suggestions) {
+        positions[s.keyword.toLowerCase()] = s.position;
+      }
+
+      const ranked = rankKeywords(
+        suggestions.map((s) => s.keyword),
+        siteDA,
+        existingTitles,
+        positions,
+      );
+      setGoogleResults(ranked);
+    } catch {
+      // silently fail
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [googleQuery, niche, content]);
+
+  const addGoogleKeyword = useCallback((rk: RankedKeyword) => {
+    addKeyword({
+      id: Date.now() + Math.random(),
+      keyword: rk.keyword,
+      term: rk.keyword,
+      volume: rk.searchVolume,
+      difficulty: rk.keywordDifficulty,
+      status: rk.decision === 'WRITE' ? 'opportunity' : 'tracked',
+      trend: 'stable',
+    });
+  }, [addKeyword]);
 
   const handleSeedImport = useCallback((seeds: SeedData) => {
     for (const kw of seeds.keywords) {
@@ -159,6 +215,13 @@ export default function SEOCenterPage() {
         >
           {showSeedUpload ? 'Close Upload' : 'Upload Keywords'}
         </Button>
+        <Button
+          variant={showGoogleDiscover ? 'default' : 'outline'}
+          onClick={() => setShowGoogleDiscover(!showGoogleDiscover)}
+          className={showGoogleDiscover ? 'bg-green-600 hover:bg-green-500 text-white' : ''}
+        >
+          {showGoogleDiscover ? 'Close Discovery' : 'Discover from Google'}
+        </Button>
         {gscConnected ? (
           <Button variant="outline" onClick={syncFromGSC} disabled={gscSyncing}>
             {gscSyncing ? 'Syncing...' : 'Sync from GSC'}
@@ -176,6 +239,79 @@ export default function SEOCenterPage() {
             existingKeywords={keywords.map((k) => k.keyword || k.term || '')}
           />
         </div>
+      )}
+
+      {/* Google Keyword Discovery */}
+      {showGoogleDiscover && (
+        <Card className="mb-6">
+          <CardHeader><CardTitle className="text-sm">Google Keyword Intelligence (Free -- 0 Credits)</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                placeholder={niche || 'Enter a seed keyword or topic...'}
+                value={googleQuery}
+                onChange={(e) => setGoogleQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleGoogleDiscover()}
+                className="flex-1 px-3 py-2 border rounded-md text-sm bg-background"
+              />
+              <Button onClick={handleGoogleDiscover} disabled={googleLoading}>
+                {googleLoading ? 'Discovering...' : 'Discover'}
+              </Button>
+            </div>
+            {googleResults.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="pb-2 pr-3">Keyword</th>
+                      <th className="pb-2 pr-3">Volume</th>
+                      <th className="pb-2 pr-3">KD</th>
+                      <th className="pb-2 pr-3">Intent</th>
+                      <th className="pb-2 pr-3">Score</th>
+                      <th className="pb-2 pr-3">Decision</th>
+                      <th className="pb-2">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {googleResults.map((rk, i) => (
+                      <tr key={i} className="border-b last:border-0">
+                        <td className="py-2 pr-3 font-medium max-w-[200px] truncate">{rk.keyword}</td>
+                        <td className="py-2 pr-3 font-mono text-xs">{rk.searchVolume.toLocaleString()}</td>
+                        <td className="py-2 pr-3">
+                          <div className="flex items-center gap-1">
+                            <div className="w-10 bg-muted rounded-full h-1.5">
+                              <div className="h-1.5 rounded-full" style={{ width: `${rk.keywordDifficulty}%`, backgroundColor: scoreBg(100 - rk.keywordDifficulty) }} />
+                            </div>
+                            <span className="font-mono text-xs">{rk.keywordDifficulty}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 pr-3"><Badge variant="outline" className="text-xs">{rk.intent}</Badge></td>
+                        <td className={`py-2 pr-3 font-mono font-bold ${scoreColor(rk.rankabilityScore)}`}>{rk.rankabilityScore}</td>
+                        <td className={`py-2 pr-3 font-bold text-xs ${DECISION_COLORS[rk.decision] || ''}`}>{rk.decision}</td>
+                        <td className="py-2">
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => addGoogleKeyword(rk)}>
+                            + Track
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="text-xs text-muted-foreground mt-3">
+                  {googleResults.filter((r) => r.decision === 'WRITE').length} keywords recommended to WRITE |
+                  {' '}{googleResults.filter((r) => r.decision === 'CONSIDER').length} to CONSIDER |
+                  {' '}{googleResults.filter((r) => r.decision === 'SKIP').length} to SKIP
+                </p>
+              </div>
+            )}
+            {googleResults.length === 0 && !googleLoading && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Enter a keyword or topic and click Discover to get real Google suggestions with AI-free scoring.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Content Health */}

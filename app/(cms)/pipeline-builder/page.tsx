@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { PipelineStreamView } from '@/components/PipelineStreamView';
 
 /* ─── Pipeline presets ──────────────────────────────────────── */
 
@@ -253,34 +254,7 @@ export default function PipelineBuilderPage() {
         <CardContent className="pt-4">
           {/* Activity Tab */}
           {activeTab === 'activity' && (
-            <div className="space-y-1 max-h-[400px] overflow-y-auto">
-              {recentActivity.length > 0 ? (
-                recentActivity.map((entry, i) => (
-                  <div
-                    key={`${entry.ts}-${i}`}
-                    className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <span className="text-sm mt-0.5 shrink-0">{activityIcon(entry.action)}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground leading-snug">{entry.action}</p>
-                      <span className="text-[10px] text-muted-foreground/50 font-mono">
-                        {entry.agentId}
-                        {entry.creditsUsed > 0 && ` \u00b7 ${entry.creditsUsed} credits`}
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground/50 font-mono whitespace-nowrap shrink-0">
-                      {relativeTime(entry.ts)}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-12">
-                  <span className="text-2xl">{'\uD83D\uDCCA'}</span>
-                  <p className="text-sm text-muted-foreground mt-2">No pipeline activity yet</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">Enable autopilot to start the pipeline</p>
-                </div>
-              )}
-            </div>
+            <PipelineStreamView maxEvents={50} heightClass="max-h-[400px]" />
           )}
 
           {/* Configuration Tab */}

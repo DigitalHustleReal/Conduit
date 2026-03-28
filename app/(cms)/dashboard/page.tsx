@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useMemo, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { PipelineGraphCompact } from '@/components/PipelineGraph';
+import { PipelineStreamView } from '@/components/PipelineStreamView';
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
@@ -347,8 +348,26 @@ export default function DashboardPage() {
       {/* ── Main Grid: Activity Feed + Right Panels ──── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-        {/* ── B. Agent Activity Feed (left 2/3) ────────── */}
-        <div className="lg:col-span-2">
+        {/* ── B. Pipeline Activity + Agent Activity (left 2/3) ── */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Pipeline Stream (live events) */}
+          <Card className="bg-card/80 backdrop-blur border-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">Pipeline Activity</CardTitle>
+                <Link href="/pipeline-builder">
+                  <Button size="sm" variant="outline" className="text-xs h-7 border-border hover:border-blue-500/50">
+                    Pipeline Builder
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <PipelineStreamView maxEvents={10} heightClass="max-h-[250px]" compact />
+            </CardContent>
+          </Card>
+
+          {/* Agent Activity Feed */}
           <Card className="bg-card/80 backdrop-blur border-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">

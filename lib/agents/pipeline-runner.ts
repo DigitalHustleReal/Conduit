@@ -24,6 +24,7 @@ import {
   type PublishLimits,
   type PublishLogEntry,
 } from './autopublish';
+import { pipelineStream } from '@/lib/pipeline/stream';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -146,11 +147,18 @@ export async function runFullPipeline(
   // --- Phase 1: Discover Keywords ---
   try {
     if (totalCredits < ac.dailyBudget) {
+      pipelineStream.emit({ stage: 'discovering', message: 'Scanning niche for keyword opportunities...', creditCost: 1 });
       const keywords = await discoverKeywords(ac, existingKeywords, settingsMap);
       totalCredits += 1;
       phases.keywords = { count: keywords.length, credits: 1 };
+      pipelineStream.emit({
+        stage: 'discovering',
+        message: `Found ${keywords.length} keyword${keywords.length !== 1 ? 's' : ''}`,
+        data: { count: keywords.length },
+      });
     }
   } catch (err) {
+    pipelineStream.emit({ stage: 'error', message: `Discovery failed: ${err instanceof Error ? err.message : 'unknown error'}` });
     errors.push(`Discovery: ${err instanceof Error ? err.message : 'unknown error'}`);
   }
 
@@ -158,6 +166,7 @@ export async function runFullPipeline(
   let plans: ContentPlan[] = [];
   try {
     if (totalCredits < ac.dailyBudget) {
+      pipelineStream.emit({ stage: 'planning', message: `Planning content from ${existingKeywords.length} keywords...`, creditCost: 1 });
       const maxPlans = Math.min(3, ac.dailyBudget - totalCredits);
       const dummyKeywords = existingKeywords.slice(0, 10).map((kw) => ({
         keyword: kw,
@@ -170,27 +179,43 @@ export async function runFullPipeline(
       plans = await planContent(ac, dummyKeywords, store.content, maxPlans, settingsMap);
       totalCredits += 1;
       phases.planning = { plans: plans.length, credits: 1 };
+      pipelineStream.emit({
+        stage: 'planning',
+        message: `Planned ${plans.length} article${plans.length !== 1 ? 's' : ''} for this cycle`,
+        data: { plans: plans.map((p) => p.title) },
+      });
     }
   } catch (err) {
+    pipelineStream.emit({ stage: 'error', message: `Planning failed: ${err instanceof Error ? err.message : 'unknown error'}` });
     errors.push(`Planning: ${err instanceof Error ? err.message : 'unknown error'}`);
   }
 
   // --- Phase 3: Write Drafts ---
   const drafts: DraftContent[] = [];
-  for (const plan of plans.slice(0, 2)) {
+  const totalToWrite = Math.min(plans.length, 2);
+  for (let pi = 0; pi < totalToWrite; pi++) {
+    const plan = plans[pi];
     if (totalCredits >= ac.dailyBudget) break;
     try {
+      pipelineStream.emit({
+        stage: 'writing',
+        message: `Generating draft: "${plan.title}"...`,
+        progress: { current: pi + 1, total: totalToWrite },
+        creditCost: 1,
+      });
       const draft = await generateDraft(plan, ac, store.content, settingsMap);
       drafts.push(draft);
       totalCredits += 1;
       phases.writing.drafts += 1;
       phases.writing.credits += 1;
     } catch (err) {
+      pipelineStream.emit({ stage: 'error', message: `Writing "${plan.title}" failed: ${err instanceof Error ? err.message : 'unknown'}` });
       errors.push(`Writing "${plan.title}": ${err instanceof Error ? err.message : 'unknown error'}`);
     }
   }
 
   // --- Phase 4: Edit / Optimize ---
+  pipelineStream.emit({ stage: 'editing', message: `Editorial review: checking SEO, readability, facts for ${drafts.length} draft${drafts.length !== 1 ? 's' : ''}...` });
   const optimizedDrafts: DraftContent[] = [];
   for (const draft of drafts) {
     if (totalCredits >= ac.dailyBudget) {
@@ -217,6 +242,7 @@ export async function runFullPipeline(
   }
 
   // --- Phase 5: Quality Gates + Auto-Publish ---
+  pipelineStream.emit({ stage: 'quality-gates', message: `Running quality gates on ${optimizedDrafts.length} draft${optimizedDrafts.length !== 1 ? 's' : ''}...` });
   const stats = getPublishStats(store.content);
 
   for (const draft of optimizedDrafts) {
@@ -241,6 +267,11 @@ export async function runFullPipeline(
       store.addContent(publishedItem);
 
       // Publish to all platforms
+      pipelineStream.emit({
+        stage: 'publishing',
+        message: `Publishing "${publishedItem.title}" to ${decision.platforms.join(', ')}`,
+        data: { title: publishedItem.title, platforms: decision.platforms },
+      });
       const results = await autoPublish(publishedItem, decision.platforms, ac, settingsMap);
       phases.publishing.published += 1;
 
@@ -252,6 +283,11 @@ export async function runFullPipeline(
       // Social distribution
       const socialPlatforms = decision.platforms.filter((p) => p === 'twitter' || p === 'linkedin');
       if (socialPlatforms.length > 0) {
+        pipelineStream.emit({
+          stage: 'distributing',
+          message: `Distributing "${publishedItem.title}" to ${socialPlatforms.join(', ')}`,
+          data: { platforms: socialPlatforms },
+        });
         phases.distribution.social += socialPlatforms.length;
         phases.distribution.platforms.push(...socialPlatforms);
       }
@@ -299,6 +335,18 @@ export async function runFullPipeline(
       store.addPublishLog(logEntry);
     }
   }
+
+  pipelineStream.emit({
+    stage: 'complete',
+    message: `Pipeline complete: ${phases.writing.drafts} article${phases.writing.drafts !== 1 ? 's' : ''}, ${phases.keywords.count} keywords, ${totalCredits} credits used`,
+    data: {
+      drafts: phases.writing.drafts,
+      published: phases.publishing.published,
+      held: phases.publishing.held,
+      keywords: phases.keywords.count,
+      totalCredits,
+    },
+  });
 
   return {
     started,

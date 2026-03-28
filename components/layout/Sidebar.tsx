@@ -13,61 +13,65 @@ interface NavItem {
   href: string;
   pro?: boolean;
   isNew?: boolean;
+  primary?: boolean;  // visually prominent — top 5 most important
 }
 
 interface NavGroup {
   title: string;
   collapsible?: boolean;
+  defaultCollapsed?: boolean;
   items: NavItem[];
 }
 
 const NAV_GROUPS: NavGroup[] = [
-  { title: 'Overview', items: [
-    { id: 'dashboard', icon: '\u26A1', label: 'Dashboard', href: '/dashboard' },
-    { id: 'review', icon: '\u2714', label: 'Review Queue', href: '/review' },
-    { id: 'autopilot', icon: '\uD83E\uDD16', label: 'Autopilot', href: '/autopilot', isNew: true },
+  { title: 'Command Center', items: [
+    { id: 'dashboard', icon: '\u26A1', label: 'Dashboard', href: '/dashboard', primary: true },
+    { id: 'review', icon: '\u2714\uFE0F', label: 'Review Queue', href: '/review', primary: true },
+    { id: 'editor', icon: '\uD83D\uDCC4', label: 'Content', href: '/editor', primary: true },
+    { id: 'ai-studio', icon: '\u2726', label: 'AI Studio', href: '/ai-studio', primary: true },
+    { id: 'agents', icon: '\uD83E\uDD16', label: 'AI Agents', href: '/agents', primary: true },
+    { id: 'seo', icon: '\uD83D\uDD0D', label: 'SEO & Keywords', href: '/seo' },
   ]},
-  { title: 'Intelligence', items: [
-    { id: 'chat', icon: '\uD83D\uDCAC', label: 'AI Chat', href: '/chat' },
-    { id: 'ai-studio', icon: '\u2726', label: 'AI Studio', href: '/ai-studio' },
-    { id: 'agents', icon: '\uD83E\uDD16', label: 'AI Agents', href: '/agents' },
-    { id: 'templates', icon: '\uD83D\uDCDA', label: 'Templates', href: '/templates' },
-    { id: 'prompt-library', icon: '\u26A1', label: 'Prompt Library', href: '/prompt-library', pro: true },
-    { id: 'seo', icon: '\uD83D\uDD0D', label: 'SEO Center', href: '/seo' },
-    { id: 'strategy', icon: '\u265F', label: 'Strategy', href: '/strategy', isNew: true },
-    { id: 'analytics', icon: '\uD83D\uDCC8', label: 'Analytics', href: '/analytics' },
-    { id: 'performance', icon: '\uD83C\uDFAF', label: 'Performance', href: '/performance', isNew: true },
+  { title: 'Autopilot', items: [
+    { id: 'autopilot', icon: '\uD83D\uDE80', label: 'Autopilot', href: '/autopilot', isNew: true },
+    { id: 'strategy', icon: '\u265F\uFE0F', label: 'Strategy', href: '/strategy' },
+    { id: 'performance', icon: '\uD83C\uDFAF', label: 'Performance', href: '/performance' },
+    { id: 'publishing', icon: '\uD83D\uDCE1', label: 'Publishing', href: '/publish-settings' },
   ]},
-  { title: 'Content', items: [
+  { title: 'Content', collapsible: true, items: [
     { id: 'collections', icon: '\uD83D\uDDC2', label: 'Collections', href: '/collections' },
-    { id: 'editor', icon: '\uD83D\uDCC4', label: 'Content', href: '/editor' },
-    { id: 'import', icon: '\uD83D\uDCE5', label: 'Import', href: '/import' },
-    { id: 'media', icon: '\uD83D\uDDBC', label: 'Media Library', href: '/media' },
     { id: 'pipeline', icon: '\uD83D\uDDC3', label: 'Pipeline', href: '/pipeline' },
-    { id: 'publishing', icon: '\uD83D\uDE80', label: 'Publishing', href: '/publish-settings', isNew: true },
+    { id: 'media', icon: '\uD83D\uDDBC', label: 'Media Library', href: '/media' },
+    { id: 'import', icon: '\uD83D\uDCE5', label: 'Import', href: '/import' },
+    { id: 'templates', icon: '\uD83D\uDCDA', label: 'Templates', href: '/templates' },
   ]},
-  { title: 'SEO Tools', collapsible: true, items: [
-    { id: 'geo-seo', icon: '\uD83E\uDD16', label: 'AI SEO / GEO', href: '/geo-seo', pro: true },
-    { id: 'prog-seo', icon: '\uD83D\uDCD0', label: 'Programmatic SEO', href: '/prog-seo', pro: true },
-    { id: 'algo-updates', icon: '\uD83D\uDCE1', label: 'Algorithm Radar', href: '/algo-updates' },
+  { title: 'Intelligence', collapsible: true, items: [
+    { id: 'chat', icon: '\uD83D\uDCAC', label: 'AI Chat', href: '/chat' },
+    { id: 'prompt-library', icon: '\u26A1', label: 'Prompt Library', href: '/prompt-library', pro: true },
+    { id: 'analytics', icon: '\uD83D\uDCC8', label: 'Analytics', href: '/analytics' },
   ]},
-  { title: 'Creator', collapsible: true, items: [
-    { id: 'creator', icon: '\uD83C\uDFAC', label: 'Creator Studio', href: '/creator', pro: true },
-    { id: 'visuals', icon: '\uD83C\uDFA8', label: 'Visual Studio', href: '/visuals', pro: true },
-  ]},
-  { title: 'Distribution', items: [
+  { title: 'Distribution', collapsible: true, items: [
     { id: 'social', icon: '\uD83D\uDCE2', label: 'Social', href: '/social' },
-    { id: 'repurpose', icon: '\u267B', label: 'Repurpose', href: '/repurpose', isNew: true },
-  ]},
-  { title: 'Monetization', items: [
+    { id: 'repurpose', icon: '\u267B\uFE0F', label: 'Repurpose', href: '/repurpose' },
     { id: 'monetisation', icon: '\uD83D\uDCB0', label: 'Monetisation', href: '/monetisation' },
     { id: 'interlinks', icon: '\uD83D\uDD17', label: 'Content Links', href: '/interlinks' },
   ]},
-  { title: 'Settings', items: [
+  { title: 'Advanced', collapsible: true, defaultCollapsed: true, items: [
+    { id: 'geo-seo', icon: '\uD83C\uDF10', label: 'AI SEO / GEO', href: '/geo-seo', pro: true },
+    { id: 'prog-seo', icon: '\uD83D\uDCD0', label: 'Programmatic SEO', href: '/prog-seo', pro: true },
+    { id: 'algo-updates', icon: '\uD83D\uDCE1', label: 'Algorithm Radar', href: '/algo-updates' },
+    { id: 'localization', icon: '\uD83C\uDF0D', label: 'Localization', href: '/localization' },
+    { id: 'creator', icon: '\uD83C\uDFAC', label: 'Creator Studio', href: '/creator', pro: true },
+    { id: 'visuals', icon: '\uD83C\uDFA8', label: 'Visual Studio', href: '/visuals', pro: true },
+  ]},
+  { title: 'Settings', collapsible: true, defaultCollapsed: true, items: [
     { id: 'ai-engine', icon: '\u2726', label: 'AI Engine', href: '/ai-engine' },
+    { id: 'integrations', icon: '\uD83D\uDD0C', label: 'Integrations', href: '/integrations' },
+    { id: 'webhooks', icon: '\uD83D\uDD14', label: 'Webhooks', href: '/webhooks' },
     { id: 'automations', icon: '\u26A1', label: 'Automations', href: '/automations' },
     { id: 'team', icon: '\uD83D\uDC65', label: 'Team', href: '/team' },
-    { id: 'settings', icon: '\uD83D\uDCB3', label: 'Settings & Billing', href: '/settings' },
+    { id: 'api-playground', icon: '\uD83E\uDDEA', label: 'API Playground', href: '/api-playground' },
+    { id: 'settings', icon: '\u2699\uFE0F', label: 'Settings & Billing', href: '/settings' },
   ]},
 ];
 
@@ -80,7 +84,13 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { siteName, credits, pricingPlan, reviewQueue } = useWorkspace();
   const pendingReviewCount = reviewQueue?.filter((q) => q.status === 'pending')?.length ?? 0;
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ 'SEO Tools': true, 'Creator': true });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const defaults: Record<string, boolean> = {};
+    NAV_GROUPS.forEach(g => { if (g.defaultCollapsed) defaults[g.title] = true; });
+    return defaults;
+  });
+  const { onboardingComplete } = useWorkspace();
+  const [showQuickStart, setShowQuickStart] = useState(!onboardingComplete);
 
   const limits = PLAN_LIMITS[pricingPlan] || PLAN_LIMITS.free;
   const used = credits.aiCalls || 0;
@@ -148,6 +158,27 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         <div className="truncate" title={siteName}>{siteName}</div>
       </div>
 
+      {/* Quick Start Guide — shows for new users */}
+      {showQuickStart && (
+        <div className="mx-3 mt-2 mb-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg relative">
+          <button onClick={() => setShowQuickStart(false)} className="absolute top-1.5 right-1.5 text-sidebar-foreground/30 hover:text-sidebar-foreground/60 text-xs">✕</button>
+          <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-2">Quick Start</div>
+          <div className="space-y-1.5">
+            {[
+              { step: '1', text: 'Set your niche', href: '/autopilot', done: false },
+              { step: '2', text: 'Create content', href: '/editor/new', done: false },
+              { step: '3', text: 'Let agents optimize', href: '/agents', done: false },
+              { step: '4', text: 'Review & publish', href: '/review', done: false },
+            ].map(s => (
+              <Link key={s.step} href={s.href} className="flex items-center gap-2 text-[11px] text-sidebar-foreground/60 hover:text-blue-400 transition-colors">
+                <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[9px] font-bold shrink-0">{s.step}</span>
+                {s.text}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="flex-1 py-2">
         {NAV_GROUPS.map((group) => (
@@ -173,10 +204,13 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                   key={item.id}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[12.5px] transition-all duration-200 relative',
+                    'flex items-center gap-2.5 px-4 mx-2 rounded-lg transition-all duration-200 relative',
+                    item.primary ? 'py-2 text-[13px]' : 'py-1.5 text-[12px]',
                     isActive
                       ? 'bg-blue-500/10 text-blue-400 font-semibold border-l-[3px] border-blue-500 ml-2 pl-3.5 shadow-[inset_0_0_12px_rgba(59,130,246,0.06)]'
-                      : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent'
+                      : item.primary
+                        ? 'text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent font-medium'
+                        : 'text-sidebar-foreground/45 hover:text-sidebar-foreground/80 hover:bg-sidebar-accent'
                   )}
                 >
                   <span className="text-sm">{item.icon}</span>

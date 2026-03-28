@@ -95,8 +95,8 @@ export function Sidebar() {
       </div>
 
       {/* Workspace */}
-      <div className="mx-3 mt-2.5 mb-1 p-2 bg-sidebar-accent rounded-lg border border-sidebar-border text-xs font-semibold truncate text-sidebar-foreground">
-        {siteName}
+      <div className="mx-3 mt-2.5 mb-1 p-2 bg-sidebar-accent rounded-lg border border-sidebar-border text-xs font-semibold text-sidebar-foreground overflow-hidden">
+        <div className="truncate" title={siteName}>{siteName}</div>
       </div>
 
       {/* Navigation */}

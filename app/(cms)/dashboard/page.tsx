@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useMemo, useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { PipelineGraphCompact } from '@/components/PipelineGraph';
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
@@ -339,6 +340,9 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Pipeline Flow ──────────────────────────────── */}
+      <PipelineGraphCompact />
 
       {/* ── Main Grid: Activity Feed + Right Panels ──── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

@@ -108,6 +108,10 @@ interface WorkspaceStore {
   // Notifications
   notifications: Notification[];
 
+  // Pipeline builder
+  pipelinePreset: string;
+  pipelineNodeConfig: Record<string, { enabled: boolean; order: number }>;
+
   // Business profile (set during onboarding)
   domain: string;
   niche: string;
@@ -116,6 +120,11 @@ interface WorkspaceStore {
   competitors: string[];
 
   // Actions
+  // Pipeline builder actions
+  setPipelinePreset: (preset: string) => void;
+  togglePipelineNode: (nodeId: string) => void;
+  reorderPipelineNode: (nodeId: string, newOrder: number) => void;
+
   setOnboardingComplete: (value: boolean) => void;
   setDomain: (value: string) => void;
   setNiche: (value: string) => void;
@@ -289,6 +298,10 @@ export const useWorkspace = create<WorkspaceStore>()(
       agentMessages: [],
       deadlines: [],
 
+      // Pipeline builder
+      pipelinePreset: 'full-autopilot',
+      pipelineNodeConfig: {},
+
       // Business profile
       domain: '',
       niche: '',
@@ -299,6 +312,29 @@ export const useWorkspace = create<WorkspaceStore>()(
       // -----------------------------------------------------------------------
       // Actions
       // -----------------------------------------------------------------------
+
+      // Pipeline builder actions
+      setPipelinePreset: (preset) => set({ pipelinePreset: preset }),
+
+      togglePipelineNode: (nodeId) => set((s) => {
+        const current = s.pipelineNodeConfig[nodeId] ?? { enabled: true, order: 0 };
+        return {
+          pipelineNodeConfig: {
+            ...s.pipelineNodeConfig,
+            [nodeId]: { ...current, enabled: !current.enabled },
+          },
+        };
+      }),
+
+      reorderPipelineNode: (nodeId, newOrder) => set((s) => {
+        const current = s.pipelineNodeConfig[nodeId] ?? { enabled: true, order: 0 };
+        return {
+          pipelineNodeConfig: {
+            ...s.pipelineNodeConfig,
+            [nodeId]: { ...current, order: newOrder },
+          },
+        };
+      }),
 
       setOnboardingComplete: (value) => set({ onboardingComplete: value }),
       setDomain: (value) => set({ domain: value }),
@@ -757,6 +793,8 @@ export const useWorkspace = create<WorkspaceStore>()(
         deadlines: state.deadlines,
         notifications: state.notifications,
         onboardingComplete: state.onboardingComplete,
+        pipelinePreset: state.pipelinePreset,
+        pipelineNodeConfig: state.pipelineNodeConfig,
         domain: state.domain,
         niche: state.niche,
         targetAudience: state.targetAudience,

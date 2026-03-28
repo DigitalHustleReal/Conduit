@@ -40,7 +40,8 @@ const NAV_GROUPS: NavGroup[] = [
   ]},
   { title: 'Content', collapsible: true, items: [
     { id: 'collections', icon: '\uD83D\uDDC2', label: 'Collections', href: '/collections' },
-    { id: 'pipeline', icon: '\uD83D\uDDC3', label: 'Pipeline', href: '/pipeline' },
+    { id: 'pipeline-builder', icon: '\uD83D\uDDC3', label: 'Pipeline Builder', href: '/pipeline-builder', isNew: true },
+    { id: 'pipeline', icon: '\uD83D\uDCCB', label: 'Kanban Board', href: '/pipeline' },
     { id: 'media', icon: '\uD83D\uDDBC', label: 'Media Library', href: '/media' },
     { id: 'import', icon: '\uD83D\uDCE5', label: 'Import', href: '/import' },
     { id: 'templates', icon: '\uD83D\uDCDA', label: 'Templates', href: '/templates' },

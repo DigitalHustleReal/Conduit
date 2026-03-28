@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useState, useMemo, useCallback } from 'react';
+import { toast } from 'sonner';
 import { SeedUploader } from '@/components/SeedUploader';
 import type { SeedData } from '@/lib/autopilot/seed';
 import { ActivationSequence } from '@/components/ActivationSequence';
+import { discoverKeywords, planContent, generateDraft } from '@/lib/autopilot/engine';
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
@@ -47,7 +49,11 @@ const CONTENT_GOALS = [
 /* ─── Autopilot Configuration Page ───────────────────────────── */
 
 export default function AutopilotPage() {
-  const { autopilot, setAutopilot, settings, setSettings, agents, keywords } = useWorkspace();
+  const {
+    autopilot, setAutopilot, settings, setSettings, agents, keywords,
+    autopilotEngineConfig, autopilotEngineState, updateAutopilotEngineState,
+    addDiscoveredKeywords, addPlannedContent, addGeneratedDraft, content,
+  } = useWorkspace();
   const addKeyword = useWorkspace((s) => s.addKeyword);
   const agentHistory = agents?.history ?? [];
 
@@ -88,6 +94,8 @@ export default function AutopilotPage() {
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>('All');
   const [saved, setSaved] = useState(false);
   const [showActivation, setShowActivation] = useState(false);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [generateLoading, setGenerateLoading] = useState(false);
 
   const isEnabled = autopilot?.enabled ?? false;
   const apStats = autopilot?.stats ?? { total_runs: 0, total_credits: 0, articles_created: 0, issues_fixed: 0, distributions: 0 };
@@ -146,10 +154,13 @@ export default function AutopilotPage() {
 
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+    toast.success('Autopilot configuration saved');
   }
 
   function handleToggleAutopilot() {
-    setAutopilot({ enabled: !isEnabled });
+    const next = !isEnabled;
+    setAutopilot({ enabled: next });
+    toast.success(next ? 'Autopilot enabled' : 'Autopilot paused');
   }
 
   function handleAddCompetitor() {
@@ -162,6 +173,72 @@ export default function AutopilotPage() {
 
   function handleRemoveCompetitor(domain: string) {
     setCompetitors(competitors.filter((c) => c !== domain));
+  }
+
+  function buildConfig() {
+    return autopilotEngineConfig ?? {
+      niche: niche || settings?.niche || '',
+      domain: (settings as unknown as Record<string, string>)?.siteDomain ?? '',
+      language: settings?.defaultLang ?? 'en',
+      targetAudience: targetAudience || '',
+      contentGoal: (contentGoal || 'traffic') as 'traffic' | 'authority' | 'conversion',
+      dailyBudget: autopilot?.creditBudget?.daily ?? 10,
+      autoPublish: autoPublish,
+      competitors: competitors,
+    };
+  }
+
+  async function handleRunDiscovery() {
+    if (!niche && !settings?.niche) {
+      toast.error('Set your niche before running discovery');
+      return;
+    }
+    setDiscoveryLoading(true);
+    try {
+      const config = buildConfig();
+      const existingKws = keywords.map((k) => k.keyword || k.term || '');
+      const aiSettings = settings as unknown as Record<string, string>;
+      const discovered = await discoverKeywords(config, existingKws, aiSettings);
+      if (discovered.length > 0) {
+        addDiscoveredKeywords(discovered);
+        toast.success(`Discovered ${discovered.length} keywords`);
+      } else {
+        toast.info('No new keywords discovered');
+      }
+    } catch (err) {
+      toast.error(`Discovery failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDiscoveryLoading(false);
+    }
+  }
+
+  async function handleGenerateContent() {
+    setGenerateLoading(true);
+    try {
+      const config = buildConfig();
+      const aiSettings = settings as unknown as Record<string, string>;
+      const kwSuggestions = autopilotEngineState.discoveredKeywords;
+
+      // Plan content first
+      const plans = await planContent(config, kwSuggestions, content, 3, aiSettings);
+      if (plans.length > 0) {
+        addPlannedContent(plans);
+        toast.success(`Planned ${plans.length} articles`);
+
+        // Generate a draft for the first plan
+        const draft = await generateDraft(plans[0], config, content, aiSettings);
+        if (draft) {
+          addGeneratedDraft(draft);
+          toast.success(`Draft generated: ${draft.title}`);
+        }
+      } else {
+        toast.info('No content plans generated. Run discovery first.');
+      }
+    } catch (err) {
+      toast.error(`Generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setGenerateLoading(false);
+    }
   }
 
   return (
@@ -394,13 +471,23 @@ export default function AutopilotPage() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-3">
-                <Button variant="outline" className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10">
+                <Button
+                  variant="outline"
+                  className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                  disabled={discoveryLoading}
+                  onClick={handleRunDiscovery}
+                >
                   <span className="mr-2">{'\uD83D\uDD0D'}</span>
-                  Run Discovery Now
+                  {discoveryLoading ? 'Discovering...' : 'Run Discovery Now'}
                 </Button>
-                <Button variant="outline" className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10">
+                <Button
+                  variant="outline"
+                  className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                  disabled={generateLoading}
+                  onClick={handleGenerateContent}
+                >
                   <span className="mr-2">{'\u270D\uFE0F'}</span>
-                  Generate Content
+                  {generateLoading ? 'Generating...' : 'Generate Content'}
                 </Button>
                 <Button
                   variant="outline"

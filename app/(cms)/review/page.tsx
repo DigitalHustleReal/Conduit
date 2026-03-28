@@ -55,6 +55,7 @@ function QueueItemCard({
   const [expanded, setExpanded] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [actionTaken, setActionTaken] = useState(false);
   const meta = QUEUE_TYPE_META[item.type];
   const impactMeta = QUEUE_IMPACT_META[item.impact];
 
@@ -184,17 +185,23 @@ function QueueItemCard({
           <Button
             size="sm"
             className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
-            onClick={onApprove}
+            disabled={actionTaken}
+            onClick={() => {
+              setActionTaken(true);
+              onApprove();
+            }}
             title="Approve (A)"
           >
-            Approve
+            {actionTaken ? 'Done' : 'Approve'}
           </Button>
           <Button
             size="sm"
             variant="destructive"
             className="h-8 px-3 text-xs"
+            disabled={actionTaken}
             onClick={() => {
               if (rejecting) {
+                setActionTaken(true);
                 onReject();
                 setRejecting(false);
               } else {

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useWorkspace } from '@/stores/workspace';
 import { heuristicSEOScore } from '@/lib/scoring/seo-score';
 import { heuristicAIScore } from '@/lib/scoring/ai-score';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -61,6 +62,7 @@ function EditorInner() {
   // --- Live scoring with debounce ---
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [liveScores, setLiveScores] = useState({ seo: 0, ai: 0 });
+  const [saving, setSaving] = useState(false);
 
   const computeScores = useCallback(() => {
     // Build a virtual ContentItem for scoring
@@ -98,21 +100,29 @@ function EditorInner() {
   const seoScore = liveScores.seo;
   const aiScore = liveScores.ai;
 
-  function handleSave() {
-    const now = Date.now();
-    if (existing) {
-      updateContentItem(existing.id, {
-        title, slug, content: body, collection, keyword,
-        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-        status, metaTitle, metaDescription: metaDesc, wordCount, seoScore, aiScore,
-      });
-    } else {
-      addContent({
-        id: now, title, slug, content: body, collection, keyword,
-        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-        status, metaTitle, metaDescription: metaDesc, wordCount,
-        aiScore, seoScore, created: now, updated: now,
-      });
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const now = Date.now();
+      if (existing) {
+        updateContentItem(existing.id, {
+          title, slug, content: body, collection, keyword,
+          tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+          status, metaTitle, metaDescription: metaDesc, wordCount, seoScore, aiScore,
+        });
+      } else {
+        addContent({
+          id: now, title, slug, content: body, collection, keyword,
+          tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+          status, metaTitle, metaDescription: metaDesc, wordCount,
+          aiScore, seoScore, created: now, updated: now,
+        });
+      }
+      toast.success(existing ? 'Article updated' : 'Article saved');
+    } catch {
+      toast.error('Failed to save article');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -182,7 +192,9 @@ function EditorInner() {
                   <option value="scheduled">Scheduled</option>
                 </select>
               </div>
-              <Button className="w-full" onClick={handleSave}>{existing ? 'Update Article' : 'Save Article'}</Button>
+              <Button className="w-full" onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving...' : existing ? 'Update Article' : 'Save Article'}
+              </Button>
             </CardContent>
           </Card>
 

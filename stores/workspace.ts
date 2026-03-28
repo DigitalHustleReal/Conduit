@@ -19,6 +19,7 @@ import type { ContentBrief } from '@/lib/agents/brief';
 import type { AgentMessage } from '@/lib/agents/handoff';
 import type { Deadline } from '@/lib/agents/deadlines';
 import { getDefaultLimits, type PublishLimits, type PublishLogEntry } from '@/lib/agents/autopublish';
+import type { Notification } from '@/components/NotificationBell';
 import type { RepurposedContent, RepurposeConfig } from '@/lib/agents/repurposer';
 import { getDefaultRepurposeConfig } from '@/lib/agents/repurposer';
 import type { PostingCalendar, ScheduledPost } from '@/lib/agents/social-scheduler';
@@ -104,6 +105,9 @@ interface WorkspaceStore {
   agentMessages: AgentMessage[];
   deadlines: Deadline[];
 
+  // Notifications
+  notifications: Notification[];
+
   // Business profile (set during onboarding)
   domain: string;
   niche: string;
@@ -158,6 +162,12 @@ interface WorkspaceStore {
   getAgentMessages: (agentId: string) => AgentMessage[];
   addDeadline: (deadline: Deadline) => void;
   updateDeadline: (contentId: string, stage: string, updates: Partial<Deadline>) => void;
+
+  // Notification actions
+  addNotification: (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  clearOldNotifications: () => void;
 
   // Publish actions
   setPublishLimits: (limits: Partial<PublishLimits>) => void;
@@ -269,6 +279,9 @@ export const useWorkspace = create<WorkspaceStore>()(
       contentHistory: {},
       analyticsEvents: [],
       onboardingComplete: false,
+
+      // Notifications
+      notifications: [],
 
       // Content brief & editorial pipeline
       brandVoiceProfile: null,
@@ -426,6 +439,41 @@ export const useWorkspace = create<WorkspaceStore>()(
         }));
         return true;
       },
+
+      // -----------------------------------------------------------------------
+      // Notification actions
+      // -----------------------------------------------------------------------
+
+      addNotification: (notification) => set((s) => ({
+        notifications: [
+          {
+            ...notification,
+            id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            read: false,
+            createdAt: Date.now(),
+          },
+          ...s.notifications,
+        ].slice(0, 100),
+      })),
+
+      markNotificationRead: (id) => set((s) => ({
+        notifications: s.notifications.map((n) =>
+          n.id === id ? { ...n, read: true } : n,
+        ),
+      })),
+
+      markAllNotificationsRead: () => set((s) => ({
+        notifications: s.notifications.map((n) => ({ ...n, read: true })),
+      })),
+
+      clearOldNotifications: () => set((s) => {
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        return {
+          notifications: s.notifications.filter(
+            (n) => !n.read || n.createdAt > sevenDaysAgo,
+          ),
+        };
+      }),
 
       setPublishLimits: (limits) => set((s) => ({
         publishLimits: { ...s.publishLimits, ...limits },
@@ -707,6 +755,7 @@ export const useWorkspace = create<WorkspaceStore>()(
         contentBriefs: state.contentBriefs,
         agentMessages: state.agentMessages,
         deadlines: state.deadlines,
+        notifications: state.notifications,
         onboardingComplete: state.onboardingComplete,
         domain: state.domain,
         niche: state.niche,

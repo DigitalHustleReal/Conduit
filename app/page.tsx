@@ -74,6 +74,7 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<string>('solo');
   const [annual, setAnnual] = useState(false);
+  const [mobileNav, setMobileNav] = useState(false);
 
   /* scroll-reveal refs for each section */
   const r1 = useReveal(); const r2 = useReveal(); const r3 = useReveal();
@@ -118,7 +119,7 @@ export default function LandingPage() {
 
       {/* ========== 1. STICKY NAV ========== */}
       <nav className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? 'backdrop-blur-xl bg-background/80 border-b border-border shadow-lg shadow-black/20' : 'bg-transparent'}`}>
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3">
           <a href="#" className="text-xl font-black bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Conduit</a>
           <div className="hidden md:flex items-center gap-8 text-sm">
             <a href="#features" onClick={smoothScroll('features')} className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
@@ -128,15 +129,52 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            <Link href="/dashboard">
+            <Link href="/dashboard" className="hidden sm:block">
               <Button size="sm" className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-shadow border-0">Open App</Button>
+            </Link>
+            {/* Hamburger — mobile only */}
+            <button
+              onClick={() => setMobileNav(!mobileNav)}
+              className="md:hidden w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              aria-label="Toggle navigation"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                {mobileNav ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
+        {/* Mobile nav dropdown */}
+        <div className={`md:hidden overflow-hidden transition-all duration-300 ${mobileNav ? 'max-h-64 border-t border-border' : 'max-h-0'}`}>
+          <div className="px-6 py-4 space-y-3 bg-background/95 backdrop-blur-xl">
+            {[
+              { label: 'Features', id: 'features' },
+              { label: 'Agents', id: 'agents' },
+              { label: 'Pricing', id: 'pricing' },
+              { label: 'FAQ', id: 'faq' },
+            ].map((item) => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                onClick={(e) => { smoothScroll(item.id)(e); setMobileNav(false); }}
+                className="block text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              >
+                {item.label}
+              </a>
+            ))}
+            <Link href="/dashboard" className="block pt-2">
+              <Button size="sm" className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0">Open App</Button>
             </Link>
           </div>
         </div>
       </nav>
 
       {/* ========== 2. HERO ========== */}
-      <section className="relative pt-32 pb-20 px-6 overflow-hidden">
+      <section className="relative pt-24 sm:pt-32 pb-12 sm:pb-20 px-4 sm:px-6 overflow-hidden">
         {/* bg glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-blue-600/15 rounded-full blur-[120px] anim-glow pointer-events-none" />
 
@@ -362,10 +400,10 @@ const articles = `}<span className="text-blue-400">await</span>{` client.getCont
         <div ref={r6.ref} className={`reveal-base ${r6.cls} max-w-3xl mx-auto`}>
           <h2 className="text-3xl sm:text-4xl font-black text-center mb-10">Built for how you work</h2>
 
-          <div className="flex justify-center gap-2 mb-10">
+          <div className="flex flex-wrap justify-center gap-2 mb-10">
             {Object.entries(USE_CASES).map(([key, val]) => (
               <button key={key} onClick={() => setActiveTab(key)}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === key ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
+                className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === key ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
                 {val.title}
               </button>
             ))}

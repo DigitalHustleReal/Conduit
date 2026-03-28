@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 
 import Link from 'next/link';
 import { useMemo, useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
@@ -103,13 +104,13 @@ function activityIcon(action: string): string {
 export default function DashboardPage() {
   const {
     content, keywords, pipeline,
-    agents, autopilot, siteName, settings,
+    agents, autopilot, setAutopilot, siteName, settings,
     reviewQueue, publishLimits, publishLog,
   } = useWorkspace();
 
   const pendingReviewCount = reviewQueue?.filter((q) => q.status === 'pending')?.length ?? 0;
 
-  const [autopilotToggle, setAutopilotToggle] = useState(autopilot?.enabled ?? false);
+  const autopilotToggle = autopilot?.enabled ?? false;
 
   const published = useMemo(() => content.filter((c) => c.status === 'published'), [content]);
   const drafts = useMemo(() => content.filter((c) => c.status === 'draft'), [content]);
@@ -227,9 +228,9 @@ export default function DashboardPage() {
       <div className={`h-0.5 bg-gradient-to-r from-blue-500 via-cyan-400 to-blue-500 rounded-full transition-all duration-1000 ${booted ? 'w-full opacity-30' : 'w-0 opacity-100'}`} />
 
       {/* ── Header ─────────────────────────────────────── */}
-      <div className={`flex items-end justify-between ${fadeIn(1)}`}>
+      <div className={`flex flex-col sm:flex-row sm:items-end justify-between gap-2 ${fadeIn(1)}`}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
             {getGreeting()}, <span className="text-blue-400">{siteName || 'Conduit'}</span>
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -269,7 +270,11 @@ export default function DashboardPage() {
             <div className="flex items-center gap-3 shrink-0">
               <span className="text-sm font-semibold text-foreground">Autopilot</span>
               <button
-                onClick={() => setAutopilotToggle(!autopilotToggle)}
+                onClick={() => {
+                  const next = !autopilotToggle;
+                  setAutopilot({ enabled: next });
+                  toast.success(next ? 'Autopilot enabled' : 'Autopilot paused');
+                }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   autopilotToggle ? 'bg-emerald-500' : 'bg-muted'
                 }`}
@@ -582,7 +587,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── F. Quick Stats Row (bottom, full width) ──── */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Publishing */}
         <Link href="/publish-settings" className="block">
           <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-rose-500 hover:border-rose-500/50 transition-colors h-full">

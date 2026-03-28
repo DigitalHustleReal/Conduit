@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspace, PLAN_LIMITS } from '@/stores/workspace';
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface NavItem {
   id: string;
@@ -71,7 +71,12 @@ const NAV_GROUPS: NavGroup[] = [
   ]},
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export function Sidebar({ open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { siteName, credits, pricingPlan, reviewQueue } = useWorkspace();
   const pendingReviewCount = reviewQueue?.filter((q) => q.status === 'pending')?.length ?? 0;
@@ -81,17 +86,61 @@ export function Sidebar() {
   const used = credits.aiCalls || 0;
   const pct = Math.min((used / limits.aiCalls) * 100, 100);
 
-  return (
-    <aside className="w-60 flex flex-col h-full overflow-y-auto shrink-0 border-r border-sidebar-border bg-sidebar">
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    if (open && onClose) {
+      onClose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  // Swipe-to-close gesture
+  const touchStartX = useRef<number | null>(null);
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  }, []);
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (dx < -80 && onClose) {
+      onClose();
+    }
+    touchStartX.current = null;
+  }, [onClose]);
+
+  // Lock body scroll when sidebar is open on mobile
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [open]);
+
+  const sidebarContent = (
+    <>
       {/* Brand — clickable, links to dashboard */}
       <Link href="/dashboard" className="p-4 border-b border-sidebar-border flex items-center gap-2.5 hover:bg-sidebar-accent/50 transition-colors cursor-pointer">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-400 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/25">
           {'\u2726'}
         </div>
-        <div>
+        <div className="flex-1">
           <div className="text-sm font-extrabold tracking-tight text-sidebar-foreground">Conduit</div>
           <div className="text-[10px] text-sidebar-foreground/50 font-mono">v8.0</div>
         </div>
+        {/* Close button — mobile only */}
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose?.(); }}
+          className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          aria-label="Close sidebar"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </Link>
 
       {/* Workspace */}
@@ -173,6 +222,36 @@ export function Sidebar() {
           141 agents &middot; 12 APIs
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Backdrop overlay — mobile only */}
+      <div
+        className={cn(
+          'fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 md:hidden',
+          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        )}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Sidebar panel */}
+      <aside
+        className={cn(
+          // Base styles
+          'w-60 flex flex-col h-full overflow-y-auto shrink-0 border-r border-sidebar-border bg-sidebar',
+          // Mobile: fixed overlay drawer with slide animation
+          'fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 md:transition-none',
+          // Mobile open/close
+          open ? 'translate-x-0' : '-translate-x-full'
+        )}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {sidebarContent}
+      </aside>
+    </>
   );
 }

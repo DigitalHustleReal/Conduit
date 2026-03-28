@@ -28,6 +28,7 @@ import {
 
 export interface AutopilotEngineConfig {
   niche: string;
+  domain: string; // user's website domain
   language: string;
   targetAudience: string;
   contentGoal: 'traffic' | 'authority' | 'conversion';
@@ -204,6 +205,7 @@ export async function discoverKeywords(
     audience: config.targetAudience,
     goal: config.contentGoal,
     language: config.language,
+    domain: config.domain || 'not set',
     competitors: config.competitors.length > 0 ? config.competitors.join(', ') : 'none specified',
     existingKeywords: existingKeywords.length > 0 ? existingKeywords.join(', ') : 'none yet',
   });
@@ -251,6 +253,9 @@ export async function planContent(
     audience: config.targetAudience,
     goal: config.contentGoal,
     language: config.language,
+    domain: config.domain || 'not set',
+    competitors: config.competitors.length > 0 ? config.competitors.join(', ') : 'none specified',
+    today: new Date().toISOString().split('T')[0],
     keywords: keywordSummary,
     existingTitles: existingTitles || 'none yet',
     count: String(Math.min(count, 7)),

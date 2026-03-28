@@ -34,6 +34,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: 'templates', icon: '\uD83D\uDCDA', label: 'Templates', href: '/templates' },
     { id: 'prompt-library', icon: '\u26A1', label: 'Prompt Library', href: '/prompt-library', pro: true },
     { id: 'seo', icon: '\uD83D\uDD0D', label: 'SEO Center', href: '/seo' },
+    { id: 'strategy', icon: '\u265F', label: 'Strategy', href: '/strategy', isNew: true },
     { id: 'analytics', icon: '\uD83D\uDCC8', label: 'Analytics', href: '/analytics' },
     { id: 'performance', icon: '\uD83C\uDFAF', label: 'Performance', href: '/performance', isNew: true },
   ]},
@@ -43,6 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: 'import', icon: '\uD83D\uDCE5', label: 'Import', href: '/import' },
     { id: 'media', icon: '\uD83D\uDDBC', label: 'Media Library', href: '/media' },
     { id: 'pipeline', icon: '\uD83D\uDDC3', label: 'Pipeline', href: '/pipeline' },
+    { id: 'publishing', icon: '\uD83D\uDE80', label: 'Publishing', href: '/publish-settings', isNew: true },
   ]},
   { title: 'SEO Tools', collapsible: true, items: [
     { id: 'geo-seo', icon: '\uD83E\uDD16', label: 'AI SEO / GEO', href: '/geo-seo', pro: true },
@@ -55,6 +57,7 @@ const NAV_GROUPS: NavGroup[] = [
   ]},
   { title: 'Distribution', items: [
     { id: 'social', icon: '\uD83D\uDCE2', label: 'Social', href: '/social' },
+    { id: 'repurpose', icon: '\u267B', label: 'Repurpose', href: '/repurpose', isNew: true },
   ]},
   { title: 'Monetization', items: [
     { id: 'monetisation', icon: '\uD83D\uDCB0', label: 'Monetisation', href: '/monetisation' },

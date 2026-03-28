@@ -14,6 +14,15 @@ import type {
 } from '@/lib/autopilot/engine';
 import { createDefaultEngineState } from '@/lib/autopilot/engine';
 import type { AgentMemory } from '@/lib/agents/runtime';
+import type { BrandVoiceProfile } from '@/lib/agents/voice';
+import type { ContentBrief } from '@/lib/agents/brief';
+import type { AgentMessage } from '@/lib/agents/handoff';
+import type { Deadline } from '@/lib/agents/deadlines';
+import { getDefaultLimits, type PublishLimits, type PublishLogEntry } from '@/lib/agents/autopublish';
+import type { RepurposedContent, RepurposeConfig } from '@/lib/agents/repurposer';
+import { getDefaultRepurposeConfig } from '@/lib/agents/repurposer';
+import type { PostingCalendar, ScheduledPost } from '@/lib/agents/social-scheduler';
+import { getDefaultCalendar } from '@/lib/agents/social-scheduler';
 import {
   loadWorkspaceData,
   syncContent,
@@ -77,8 +86,23 @@ interface WorkspaceStore {
   // Analytics
   analyticsEvents: Array<{ id: number; type: string; contentId?: string; ts: number; meta?: Record<string, unknown> }>;
 
+  // Publishing
+  publishLimits: PublishLimits;
+  publishLog: PublishLogEntry[];
+
+  // Repurpose & Social Calendar
+  repurposeConfig: RepurposeConfig;
+  repurposedContent: RepurposedContent[];
+  socialCalendar: PostingCalendar;
+
   // Onboarding
   onboardingComplete: boolean;
+
+  // Content brief & editorial pipeline
+  brandVoiceProfile: BrandVoiceProfile | null;
+  contentBriefs: Record<string, ContentBrief>;
+  agentMessages: AgentMessage[];
+  deadlines: Deadline[];
 
   // Business profile (set during onboarding)
   domain: string;
@@ -126,6 +150,27 @@ interface WorkspaceStore {
   logAgentRun: (agentId: string, action: string, result: unknown, credits: number) => void;
   updateAgentRuntimeMemory: (agentId: string, memory: AgentMemory) => void;
   getAgentRuntimeMemory: (agentId: string) => AgentMemory | undefined;
+
+  // Brief & editorial pipeline actions
+  setBrandVoiceProfile: (profile: BrandVoiceProfile | null) => void;
+  addContentBrief: (keyword: string, brief: ContentBrief) => void;
+  postAgentMessage: (msg: Omit<AgentMessage, 'timestamp'>) => void;
+  getAgentMessages: (agentId: string) => AgentMessage[];
+  addDeadline: (deadline: Deadline) => void;
+  updateDeadline: (contentId: string, stage: string, updates: Partial<Deadline>) => void;
+
+  // Publish actions
+  setPublishLimits: (limits: Partial<PublishLimits>) => void;
+  addPublishLog: (entry: PublishLogEntry) => void;
+
+  // Repurpose actions
+  setRepurposeConfig: (config: Partial<RepurposeConfig>) => void;
+  addRepurposedContent: (items: RepurposedContent[]) => void;
+  clearRepurposedContent: () => void;
+  addScheduledPost: (post: ScheduledPost) => void;
+  addScheduledPosts: (posts: ScheduledPost[]) => void;
+  updatePostStatus: (postId: string, status: ScheduledPost['status']) => void;
+  setSocialCalendarRules: (rules: Partial<PostingCalendar['rules']>) => void;
 
   // Review queue actions
   addToQueue: (item: Omit<QueueItem, 'id' | 'status' | 'createdAt'>) => QueueItem;
@@ -215,10 +260,21 @@ export const useWorkspace = create<WorkspaceStore>()(
       autopilot: DEFAULT_AUTOPILOT,
       autopilotEngineConfig: null,
       autopilotEngineState: createDefaultEngineState(),
+      publishLimits: getDefaultLimits(),
+      publishLog: [],
+      repurposeConfig: getDefaultRepurposeConfig(),
+      repurposedContent: [],
+      socialCalendar: getDefaultCalendar(),
       reviewQueue: [],
       contentHistory: {},
       analyticsEvents: [],
       onboardingComplete: false,
+
+      // Content brief & editorial pipeline
+      brandVoiceProfile: null,
+      contentBriefs: {},
+      agentMessages: [],
+      deadlines: [],
 
       // Business profile
       domain: '',
@@ -371,6 +427,55 @@ export const useWorkspace = create<WorkspaceStore>()(
         return true;
       },
 
+      setPublishLimits: (limits) => set((s) => ({
+        publishLimits: { ...s.publishLimits, ...limits },
+      })),
+
+      addPublishLog: (entry) => set((s) => ({
+        publishLog: [entry, ...s.publishLog].slice(0, 500),
+      })),
+
+      // Repurpose actions
+      setRepurposeConfig: (config) => set((s) => ({
+        repurposeConfig: { ...s.repurposeConfig, ...config },
+      })),
+
+      addRepurposedContent: (items) => set((s) => ({
+        repurposedContent: [...items, ...s.repurposedContent].slice(0, 500),
+      })),
+
+      clearRepurposedContent: () => set({ repurposedContent: [] }),
+
+      addScheduledPost: (post) => set((s) => ({
+        socialCalendar: {
+          ...s.socialCalendar,
+          posts: [post, ...s.socialCalendar.posts].slice(0, 1000),
+        },
+      })),
+
+      addScheduledPosts: (posts) => set((s) => ({
+        socialCalendar: {
+          ...s.socialCalendar,
+          posts: [...posts, ...s.socialCalendar.posts].slice(0, 1000),
+        },
+      })),
+
+      updatePostStatus: (postId, status) => set((s) => ({
+        socialCalendar: {
+          ...s.socialCalendar,
+          posts: s.socialCalendar.posts.map((p) =>
+            p.id === postId ? { ...p, status } : p,
+          ),
+        },
+      })),
+
+      setSocialCalendarRules: (rules) => set((s) => ({
+        socialCalendar: {
+          ...s.socialCalendar,
+          rules: { ...s.socialCalendar.rules, ...rules },
+        },
+      })),
+
       setAutopilot: (config) => set((s) => ({ autopilot: { ...s.autopilot, ...config } })),
 
       setAutopilotEngineConfig: (config) => set({ autopilotEngineConfig: config }),
@@ -430,6 +535,41 @@ export const useWorkspace = create<WorkspaceStore>()(
       })),
 
       getAgentRuntimeMemory: (agentId) => get().agentRuntimeMemories[agentId],
+
+      // -----------------------------------------------------------------------
+      // Brief & editorial pipeline actions
+      // -----------------------------------------------------------------------
+
+      setBrandVoiceProfile: (profile) => set({ brandVoiceProfile: profile }),
+
+      addContentBrief: (keyword, brief) => set((s) => ({
+        contentBriefs: { ...s.contentBriefs, [keyword]: brief },
+      })),
+
+      postAgentMessage: (msg) => set((s) => ({
+        agentMessages: [
+          ...s.agentMessages,
+          { ...msg, timestamp: Date.now() },
+        ].slice(-300),
+      })),
+
+      getAgentMessages: (agentId) => {
+        return get().agentMessages.filter(
+          (m) => m.to === agentId || m.to === 'all',
+        );
+      },
+
+      addDeadline: (deadline) => set((s) => ({
+        deadlines: [...s.deadlines, deadline].slice(0, 500),
+      })),
+
+      updateDeadline: (contentId, stage, updates) => set((s) => ({
+        deadlines: s.deadlines.map((d) =>
+          d.contentId === contentId && d.stage === stage
+            ? { ...d, ...updates }
+            : d,
+        ),
+      })),
 
       // -----------------------------------------------------------------------
       // Review queue actions
@@ -556,8 +696,17 @@ export const useWorkspace = create<WorkspaceStore>()(
         autopilot: state.autopilot,
         autopilotEngineConfig: state.autopilotEngineConfig,
         autopilotEngineState: state.autopilotEngineState,
+        publishLimits: state.publishLimits,
+        publishLog: state.publishLog,
+        repurposeConfig: state.repurposeConfig,
+        repurposedContent: state.repurposedContent,
+        socialCalendar: state.socialCalendar,
         reviewQueue: state.reviewQueue,
         contentHistory: state.contentHistory,
+        brandVoiceProfile: state.brandVoiceProfile,
+        contentBriefs: state.contentBriefs,
+        agentMessages: state.agentMessages,
+        deadlines: state.deadlines,
         onboardingComplete: state.onboardingComplete,
         domain: state.domain,
         niche: state.niche,

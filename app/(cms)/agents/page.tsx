@@ -14,9 +14,11 @@ import {
   getAllAgentMemories,
   runAgentById,
   getAllAgentStatuses,
-  processAgentFeedback,
 } from '@/lib/agents/registry';
 import type { AgentWorkspaceView } from '@/lib/agents/runtime';
+import { PIPELINE_DISPLAY_STAGES } from '@/lib/agents/handoff';
+import { analyzeVoice, type BrandVoiceProfile } from '@/lib/agents/voice';
+import { checkDeadlines, getUpcomingDeadlines } from '@/lib/agents/deadlines';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,13 +54,17 @@ const LOWER_IS_BETTER = new Set(['low_seo_count', 'stale_content_count', 'declin
 
 export default function AIAgentsPage() {
   const store = useWorkspace();
-  const { autopilot, setAutopilot, agentRuntimeMemories, updateAgentRuntimeMemory } = store;
+  const {
+    autopilot, setAutopilot, agentRuntimeMemories, updateAgentRuntimeMemory,
+    brandVoiceProfile, setBrandVoiceProfile, content, deadlines,
+  } = store;
 
   const [budgetDaily, setBudgetDaily] = useState(autopilot.creditBudget.daily);
   const [budgetWeekly, setBudgetWeekly] = useState(autopilot.creditBudget.weekly);
   const [runningAgent, setRunningAgent] = useState<string | null>(null);
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [agentStatuses, setAgentStatuses] = useState<ReturnType<typeof getAllAgentStatuses>>([]);
+  const [analyzingVoice, setAnalyzingVoice] = useState(false);
 
   // Load persisted memories into agent instances on mount
   useEffect(() => {
@@ -151,6 +157,26 @@ export default function AIAgentsPage() {
     });
     setRunningAgent(null);
   }, [buildStoreView, updateAgentRuntimeMemory]);
+
+  // Voice analysis handler
+  const handleAnalyzeVoice = useCallback(() => {
+    setAnalyzingVoice(true);
+    try {
+      const profile = analyzeVoice(content);
+      setBrandVoiceProfile(profile);
+      toast.success('Brand voice profile updated', {
+        description: `Tone: ${profile.tone}, Vocabulary: ${profile.vocabularyLevel}`,
+      });
+    } catch (err) {
+      toast.error(`Voice analysis failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setAnalyzingVoice(false);
+    }
+  }, [content, setBrandVoiceProfile]);
+
+  // Deadline check
+  const deadlineStatus = checkDeadlines([...deadlines]);
+  const upcomingDeadlines = getUpcomingDeadlines(deadlines, 7);
 
   // Aggregate stats
   const totalRuns = agentStatuses.reduce((s, a) => s + a.status.totalRuns, 0);
@@ -380,6 +406,175 @@ export default function AIAgentsPage() {
             <p className="text-xs text-muted-foreground mb-1">Today: {autopilot.creditBudget.used_today} / {autopilot.creditBudget.daily} credits</p>
             <Progress value={(autopilot.creditBudget.used_today / autopilot.creditBudget.daily) * 100} />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Content Pipeline */}
+      <h2 className="text-lg font-semibold mb-3 mt-8">Content Pipeline</h2>
+      <Card>
+        <CardContent className="pt-4">
+          <p className="text-xs text-muted-foreground mb-4">
+            Content moves through this pipeline automatically. Each stage is handled by a dedicated agent.
+          </p>
+          <div className="flex items-center gap-1 overflow-x-auto pb-2">
+            {PIPELINE_DISPLAY_STAGES.map((stage, i) => {
+              const agentStatus = agentStatuses.find((a) => a.id === stage.id);
+              const hasActivity = agentStatus && agentStatus.status.totalRuns > 0;
+              return (
+                <div key={stage.id} className="flex items-center gap-1 shrink-0">
+                  <div className={`rounded-lg border px-3 py-2 text-center min-w-[100px] ${hasActivity ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border'}`}>
+                    <p className="text-xs font-medium">{stage.label}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{stage.description}</p>
+                    {agentStatus && (
+                      <p className="text-[10px] text-muted-foreground mt-1">{agentStatus.status.totalActions} actions</p>
+                    )}
+                  </div>
+                  {i < PIPELINE_DISPLAY_STAGES.length - 1 && (
+                    <span className="text-muted-foreground text-xs shrink-0">&rarr;</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Brand Voice */}
+      <h2 className="text-lg font-semibold mb-3 mt-8">Brand Voice</h2>
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-medium">Voice Profile</p>
+              <p className="text-xs text-muted-foreground">
+                Analyzes your published content to learn your writing style (0 credits)
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={analyzingVoice}
+              onClick={handleAnalyzeVoice}
+            >
+              {analyzingVoice ? 'Analyzing...' : brandVoiceProfile ? 'Re-analyze' : 'Analyze Voice'}
+            </Button>
+          </div>
+
+          {brandVoiceProfile ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="rounded-lg border border-border px-3 py-2">
+                <p className="text-[10px] text-muted-foreground uppercase">Tone</p>
+                <p className="text-sm font-medium capitalize">{brandVoiceProfile.tone}</p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2">
+                <p className="text-[10px] text-muted-foreground uppercase">Vocabulary</p>
+                <p className="text-sm font-medium capitalize">{brandVoiceProfile.vocabularyLevel}</p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2">
+                <p className="text-[10px] text-muted-foreground uppercase">Avg Sentence</p>
+                <p className="text-sm font-medium">{brandVoiceProfile.avgSentenceLength} words</p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2">
+                <p className="text-[10px] text-muted-foreground uppercase">First Person</p>
+                <p className="text-sm font-medium">{brandVoiceProfile.usesFirstPerson ? 'Yes' : 'No'}</p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2">
+                <p className="text-[10px] text-muted-foreground uppercase">Prefers Lists</p>
+                <p className="text-sm font-medium">{brandVoiceProfile.prefersLists ? 'Yes' : 'No'}</p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2">
+                <p className="text-[10px] text-muted-foreground uppercase">Heading Style</p>
+                <p className="text-sm font-medium capitalize">{brandVoiceProfile.headingStyle}</p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2 col-span-2 sm:col-span-3">
+                <p className="text-[10px] text-muted-foreground uppercase">Intro Pattern</p>
+                <p className="text-sm font-medium">{brandVoiceProfile.introPattern}</p>
+              </div>
+              {brandVoiceProfile.samplePhrases.length > 0 && (
+                <div className="col-span-2 sm:col-span-3">
+                  <p className="text-[10px] text-muted-foreground uppercase mb-1">Characteristic Phrases</p>
+                  <div className="flex flex-wrap gap-1">
+                    {brandVoiceProfile.samplePhrases.slice(0, 8).map((phrase, i) => (
+                      <Badge key={i} variant="outline" className="text-[10px]">{phrase}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="col-span-2 sm:col-span-3">
+                <p className="text-[10px] text-muted-foreground">
+                  Last analyzed: {new Date(brandVoiceProfile.lastAnalyzed).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No voice profile yet. Publish some content, then click &quot;Analyze Voice&quot; to learn your writing style.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Deadlines */}
+      <h2 className="text-lg font-semibold mb-3 mt-8">Deadlines</h2>
+      <Card>
+        <CardContent className="pt-4">
+          {deadlines.length > 0 ? (
+            <>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-emerald-400">{deadlineStatus.onTrack}</p>
+                  <p className="text-xs text-muted-foreground">On Track</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-amber-400">{deadlineStatus.atRisk}</p>
+                  <p className="text-xs text-muted-foreground">At Risk</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-rose-400">{deadlineStatus.overdue}</p>
+                  <p className="text-xs text-muted-foreground">Overdue</p>
+                </div>
+              </div>
+
+              {upcomingDeadlines.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Upcoming (7 days)</p>
+                  {upcomingDeadlines.slice(0, 8).map((d, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] shrink-0 ${
+                          d.status === 'overdue' ? 'text-rose-400 border-rose-500/30' :
+                          d.status === 'at-risk' ? 'text-amber-400 border-amber-500/30' :
+                          'text-emerald-400 border-emerald-500/30'
+                        }`}
+                      >
+                        {d.status}
+                      </Badge>
+                      <span className="truncate flex-1">{d.title}</span>
+                      <Badge variant="outline" className="text-[9px] shrink-0">{d.stage}</Badge>
+                      <span className="text-muted-foreground shrink-0">
+                        {new Date(d.dueDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {deadlineStatus.alerts.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {deadlineStatus.alerts.slice(0, 5).map((alert, i) => (
+                    <p key={i} className={`text-xs ${alert.startsWith('OVERDUE') ? 'text-rose-400' : 'text-amber-400'}`}>
+                      {alert}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No deadlines set. Run the autopilot engine to auto-schedule content deadlines.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

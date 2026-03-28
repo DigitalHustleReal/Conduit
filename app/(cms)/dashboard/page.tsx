@@ -104,7 +104,7 @@ export default function DashboardPage() {
   const {
     content, keywords, pipeline,
     agents, autopilot, siteName, settings,
-    reviewQueue,
+    reviewQueue, publishLimits, publishLog,
   } = useWorkspace();
 
   const pendingReviewCount = reviewQueue?.filter((q) => q.status === 'pending')?.length ?? 0;
@@ -115,6 +115,13 @@ export default function DashboardPage() {
   const drafts = useMemo(() => content.filter((c) => c.status === 'draft'), [content]);
   const avgSEO = published.length ? Math.round(published.reduce((a, c) => a + (c.seoScore || 0), 0) / published.length) : 0;
   const activeAgents = Object.values(agents.registry).filter((a) => a.enabled).length;
+
+  /* Publish stats */
+  const publishedToday = useMemo(() => {
+    const dayStart = Date.now() - 86400000;
+    return content.filter((c) => c.status === 'published' && (c.publishDate || c.updated) > dayStart).length;
+  }, [content]);
+  const heldForReviewCount = useMemo(() => content.filter((c) => c.status === 'review').length, [content]);
 
   /* Autopilot state with safe access */
   const apBudget = autopilot?.creditBudget ?? { daily: 10, used_today: 0 };
@@ -553,7 +560,28 @@ export default function DashboardPage() {
       </div>
 
       {/* ── F. Quick Stats Row (bottom, full width) ──── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+        {/* Publishing */}
+        <Link href="/publish-settings" className="block">
+          <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-rose-500 hover:border-rose-500/50 transition-colors h-full">
+            <CardContent className="p-4">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Publishing</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`inline-block h-2 w-2 rounded-full ${publishLimits.autoPublishEnabled ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                <span className={`text-sm font-semibold ${publishLimits.autoPublishEnabled ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {publishLimits.autoPublishEnabled ? 'Auto ON' : 'Auto OFF'}
+                </span>
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">
+                {publishedToday}/{publishLimits.maxPerDay} today
+                {heldForReviewCount > 0 && (
+                  <span className="text-amber-400 ml-1">&middot; {heldForReviewCount} held</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
         {/* Total Content */}
         <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-blue-500">
           <CardContent className="p-4">

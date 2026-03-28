@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
@@ -205,15 +205,37 @@ export default function DashboardPage() {
   const conductorInterval = autopilot?.schedule?.conductor_interval ?? 21600000;
   const nextRunHours = Math.round(conductorInterval / 3600000);
 
+  /* ── Boot animation state ─── */
+  const [booted, setBooted] = useState(false);
+  const [bootPhase, setBootPhase] = useState(0);
+  useEffect(() => {
+    // Stagger sections appearing like a system powering on
+    const t1 = setTimeout(() => setBootPhase(1), 100);  // header
+    const t2 = setTimeout(() => setBootPhase(2), 300);  // stat cards
+    const t3 = setTimeout(() => setBootPhase(3), 600);  // content area
+    const t4 = setTimeout(() => setBootPhase(4), 900);  // sidebar panels
+    const t5 = setTimeout(() => { setBootPhase(5); setBooted(true); }, 1200); // fully loaded
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); };
+  }, []);
+
+  const fadeIn = (phase: number) =>
+    `transition-all duration-500 ${bootPhase >= phase ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`;
+
   return (
     <div className="space-y-6">
+      {/* ── System boot line ─── */}
+      <div className={`h-0.5 bg-gradient-to-r from-blue-500 via-cyan-400 to-blue-500 rounded-full transition-all duration-1000 ${booted ? 'w-full opacity-30' : 'w-0 opacity-100'}`} />
+
       {/* ── Header ─────────────────────────────────────── */}
-      <div className="flex items-end justify-between">
+      <div className={`flex items-end justify-between ${fadeIn(1)}`}>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             {getGreeting()}, <span className="text-blue-400">{siteName || 'Conduit'}</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">{formatDate()}</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {published.length} published · {activeAgents} agents active · Autopilot {autopilot?.enabled ? 'ON' : 'OFF'}
+          </p>
+          <p className="text-xs text-muted-foreground/50 font-mono mt-0.5">{formatDate()}</p>
         </div>
       </div>
 

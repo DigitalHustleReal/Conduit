@@ -83,8 +83,8 @@ export function Sidebar() {
 
   return (
     <aside className="w-60 flex flex-col h-full overflow-y-auto shrink-0 border-r border-sidebar-border bg-sidebar">
-      {/* Brand */}
-      <div className="p-4 border-b border-sidebar-border flex items-center gap-2.5">
+      {/* Brand — clickable, links to dashboard */}
+      <Link href="/dashboard" className="p-4 border-b border-sidebar-border flex items-center gap-2.5 hover:bg-sidebar-accent/50 transition-colors cursor-pointer">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-400 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/25">
           {'\u2726'}
         </div>
@@ -92,7 +92,7 @@ export function Sidebar() {
           <div className="text-sm font-extrabold tracking-tight text-sidebar-foreground">Conduit</div>
           <div className="text-[10px] text-sidebar-foreground/50 font-mono">v8.0</div>
         </div>
-      </div>
+      </Link>
 
       {/* Workspace */}
       <div className="mx-3 mt-2.5 mb-1 p-2 bg-sidebar-accent rounded-lg border border-sidebar-border text-xs font-semibold text-sidebar-foreground overflow-hidden">

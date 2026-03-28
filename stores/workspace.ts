@@ -13,6 +13,7 @@ import type {
   DraftContent,
 } from '@/lib/autopilot/engine';
 import { createDefaultEngineState } from '@/lib/autopilot/engine';
+import type { AgentMemory } from '@/lib/agents/runtime';
 import {
   loadWorkspaceData,
   syncContent,
@@ -60,6 +61,7 @@ interface WorkspaceStore {
   agents: AgentState;
   agentFeedback: AgentFeedbackEntry[];
   agentMemory: Record<string, Record<string, { value: unknown; ts: number }>>;
+  agentRuntimeMemories: Record<string, AgentMemory>;
   autopilot: AutopilotConfig;
 
   // Autopilot engine
@@ -122,6 +124,8 @@ interface WorkspaceStore {
   addGeneratedDraft: (draft: DraftContent) => void;
   addAgentFeedback: (entry: AgentFeedbackEntry) => void;
   logAgentRun: (agentId: string, action: string, result: unknown, credits: number) => void;
+  updateAgentRuntimeMemory: (agentId: string, memory: AgentMemory) => void;
+  getAgentRuntimeMemory: (agentId: string) => AgentMemory | undefined;
 
   // Review queue actions
   addToQueue: (item: Omit<QueueItem, 'id' | 'status' | 'createdAt'>) => QueueItem;
@@ -207,6 +211,7 @@ export const useWorkspace = create<WorkspaceStore>()(
       },
       agentFeedback: [],
       agentMemory: {},
+      agentRuntimeMemories: {},
       autopilot: DEFAULT_AUTOPILOT,
       autopilotEngineConfig: null,
       autopilotEngineState: createDefaultEngineState(),
@@ -420,6 +425,12 @@ export const useWorkspace = create<WorkspaceStore>()(
         },
       })),
 
+      updateAgentRuntimeMemory: (agentId, memory) => set((s) => ({
+        agentRuntimeMemories: { ...s.agentRuntimeMemories, [agentId]: memory },
+      })),
+
+      getAgentRuntimeMemory: (agentId) => get().agentRuntimeMemories[agentId],
+
       // -----------------------------------------------------------------------
       // Review queue actions
       // -----------------------------------------------------------------------
@@ -541,6 +552,7 @@ export const useWorkspace = create<WorkspaceStore>()(
         agents: state.agents,
         agentFeedback: state.agentFeedback,
         agentMemory: state.agentMemory,
+        agentRuntimeMemories: state.agentRuntimeMemories,
         autopilot: state.autopilot,
         autopilotEngineConfig: state.autopilotEngineConfig,
         autopilotEngineState: state.autopilotEngineState,

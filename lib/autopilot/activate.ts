@@ -58,6 +58,7 @@ export async function activateWorkspace(
   // Build engine config from activation config
   const engineConfig: AutopilotEngineConfig = {
     niche: config.niche,
+    domain: config.domain,
     language: config.language,
     targetAudience: config.targetAudience || 'general audience',
     contentGoal: config.contentGoal,

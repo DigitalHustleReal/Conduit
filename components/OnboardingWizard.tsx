@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWorkspace } from '@/stores/workspace';
-import { activateWorkspace } from '@/lib/autopilot/activate';
-import type { ActivationResult } from '@/lib/autopilot/activate';
 import { SeedUploader } from '@/components/SeedUploader';
 import type { SeedData } from '@/lib/autopilot/seed';
+import { ActivationSequence } from '@/components/ActivationSequence';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -149,20 +148,14 @@ export function OnboardingWizard() {
   const setSettings = useWorkspace((s) => s.setSettings);
   const setWorkspaceFn = useWorkspace((s) => s.setWorkspace);
   const workspaceId = useWorkspace((s) => s.workspaceId);
-  const addContent = useWorkspace((s) => s.addContent);
-  const deductCredit = useWorkspace((s) => s.deductCredit);
   const setOnboardingComplete = useWorkspace((s) => s.setOnboardingComplete);
   const addKeyword = useWorkspace((s) => s.addKeyword);
-  const addPipelineItem = useWorkspace((s) => s.addPipelineItem);
   const setDomain = useWorkspace((s) => s.setDomain);
   const setNiche = useWorkspace((s) => s.setNiche);
   const setTargetAudience = useWorkspace((s) => s.setTargetAudience);
   const setContentGoal = useWorkspace((s) => s.setContentGoal);
   const setCompetitors = useWorkspace((s) => s.setCompetitors);
   const setAutopilot = useWorkspace((s) => s.setAutopilot);
-  const addDiscoveredKeywords = useWorkspace((s) => s.addDiscoveredKeywords);
-  const addPlannedContent = useWorkspace((s) => s.addPlannedContent);
-  const addGeneratedDraft = useWorkspace((s) => s.addGeneratedDraft);
   const setAutopilotEngineConfig = useWorkspace((s) => s.setAutopilotEngineConfig);
   const updateAutopilotEngineState = useWorkspace((s) => s.updateAutopilotEngineState);
 
@@ -175,12 +168,6 @@ export function OnboardingWizard() {
     ...(saved?.data ?? {}),
   }));
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left');
-
-  // Activation state (step 4)
-  const [activationResult, setActivationResult] = useState<ActivationResult | null>(null);
-  const [activationPhase, setActivationPhase] = useState(0); // 0-4
-  const [activationDone, setActivationDone] = useState(false);
-  const [activationError, setActivationError] = useState('');
 
   // Persist on change
   useEffect(() => {
@@ -245,6 +232,7 @@ export function OnboardingWizard() {
     // Configure autopilot engine
     setAutopilotEngineConfig({
       niche: resolvedNiche,
+      domain: data.domain,
       language: data.language,
       targetAudience: data.targetAudience,
       contentGoal: data.contentGoal as 'traffic' | 'authority' | 'conversion',
@@ -318,37 +306,11 @@ export function OnboardingWizard() {
           />
         );
       case 4:
-        return (
-          <StepActivation
-            data={data}
-            settings={settings as unknown as Record<string, string>}
-            activationResult={activationResult}
-            activationPhase={activationPhase}
-            activationDone={activationDone}
-            activationError={activationError}
-            setActivationResult={setActivationResult}
-            setActivationPhase={setActivationPhase}
-            setActivationDone={setActivationDone}
-            setActivationError={setActivationError}
-            deductCredit={deductCredit}
-            addDiscoveredKeywords={addDiscoveredKeywords}
-            addPlannedContent={addPlannedContent}
-            addGeneratedDraft={addGeneratedDraft}
-            addKeyword={addKeyword}
-            addContent={addContent}
-            addPipelineItem={addPipelineItem}
-            onNext={goNext}
-            onBack={goBack}
-          />
-        );
+        // Full-screen ActivationSequence overlay — replaces old step 4 + 5
+        return null;
       case 5:
-        return (
-          <StepDone
-            activationResult={activationResult}
-            onFinish={finish}
-            onBack={goBack}
-          />
-        );
+        // Kept for step indicator count but unreachable — activation handles completion
+        return null;
       default:
         return null;
     }
@@ -406,6 +368,19 @@ export function OnboardingWizard() {
         }
         .animate-pulse-slow { animation: progressPulse 1.5s ease-in-out infinite; }
       `}</style>
+
+      {/* Live Activation overlay — replaces old step 4 + 5 */}
+      {step >= 4 && (
+        <ActivationSequence
+          niche={data.niche === 'Other' ? data.customNiche : data.niche}
+          domain={data.domain}
+          competitors={data.competitors}
+          language={data.language}
+          targetAudience={data.targetAudience}
+          contentGoal={data.contentGoal}
+          onComplete={finish}
+        />
+      )}
     </div>
   );
 }
@@ -834,387 +809,5 @@ function StepConnectData({
 }
 
 // ---------------------------------------------------------------------------
-// Step 5 -- Activation
+// Steps 5-6 replaced by ActivationSequence overlay (see components/ActivationSequence.tsx)
 // ---------------------------------------------------------------------------
-
-interface ActivationStepProps {
-  data: OnboardingData;
-  settings: Record<string, string>;
-  activationResult: ActivationResult | null;
-  activationPhase: number;
-  activationDone: boolean;
-  activationError: string;
-  setActivationResult: (r: ActivationResult | null) => void;
-  setActivationPhase: (p: number) => void;
-  setActivationDone: (d: boolean) => void;
-  setActivationError: (e: string) => void;
-  deductCredit: (type?: 'aiCalls') => boolean;
-  addDiscoveredKeywords: (kw: import('@/lib/autopilot/engine').KeywordSuggestion[]) => void;
-  addPlannedContent: (plans: import('@/lib/autopilot/engine').ContentPlan[]) => void;
-  addGeneratedDraft: (draft: import('@/lib/autopilot/engine').DraftContent) => void;
-  addKeyword: (item: import('@/types/content').Keyword) => void;
-  addContent: (item: import('@/types/content').ContentItem) => void;
-  addPipelineItem: (item: import('@/types/content').PipelineItem) => void;
-  onNext: () => void;
-  onBack: () => void;
-}
-
-function StepActivation({
-  data,
-  settings,
-  activationResult,
-  activationPhase,
-  activationDone,
-  activationError,
-  setActivationResult,
-  setActivationPhase,
-  setActivationDone,
-  setActivationError,
-  deductCredit,
-  addDiscoveredKeywords,
-  addPlannedContent,
-  addGeneratedDraft,
-  addKeyword,
-  addContent,
-  addPipelineItem,
-  onNext,
-  onBack,
-}: ActivationStepProps) {
-  const hasStarted = useRef(false);
-
-  const resolvedNiche = data.niche === 'Other' ? data.customNiche : data.niche;
-
-  const phases = [
-    { label: 'Workspace created', doneLabel: 'Workspace created' },
-    { label: `Discovering keywords for ${resolvedNiche}...`, doneLabel: '' },
-    { label: 'Planning content calendar...', doneLabel: '' },
-    { label: 'Generating first draft...', doneLabel: '' },
-    { label: 'Activating 8 autonomous agents...', doneLabel: 'All agents online' },
-  ];
-
-  useEffect(() => {
-    if (hasStarted.current) return;
-    hasStarted.current = true;
-
-    async function run() {
-      // Phase 0: workspace created (instant)
-      setActivationPhase(1);
-
-      // Phase 1-3: AI activation
-      try {
-        // Start activation with progress callbacks via phased approach
-        setActivationPhase(1);
-
-        const result = await activateWorkspace(
-          {
-            niche: resolvedNiche,
-            domain: data.domain,
-            competitors: data.competitors,
-            language: data.language,
-            targetAudience: data.targetAudience,
-            contentGoal: data.contentGoal as 'traffic' | 'authority' | 'conversion',
-          },
-          settings as Record<string, string>,
-        );
-
-        // Update phases based on what succeeded
-        if (result.keywords.length > 0) {
-          setActivationPhase(2);
-          // Add keywords to store
-          addDiscoveredKeywords(result.keywords);
-          for (const kw of result.keywords) {
-            addKeyword({
-              id: Date.now() + Math.random(),
-              keyword: kw.keyword,
-              volume: kw.estimatedVolume === 'high' ? 5000 : kw.estimatedVolume === 'medium' ? 1000 : 200,
-              difficulty: kw.estimatedDifficulty === 'high' ? 80 : kw.estimatedDifficulty === 'medium' ? 50 : 20,
-              status: 'opportunity',
-            });
-          }
-          // Deduct credit for keyword discovery
-          deductCredit('aiCalls');
-        }
-
-        if (result.plans.length > 0) {
-          setActivationPhase(3);
-          addPlannedContent(result.plans);
-          // Add to pipeline
-          for (const plan of result.plans) {
-            addPipelineItem({
-              id: Date.now() + Math.random(),
-              title: plan.title,
-              keyword: plan.keyword,
-              stage: 'backlog',
-              assignee: 'AI Autopilot',
-              priority: plan.priority,
-              updated: Date.now(),
-            });
-          }
-          deductCredit('aiCalls');
-        }
-
-        if (result.draft) {
-          setActivationPhase(4);
-          addGeneratedDraft(result.draft);
-          // Also add as content item
-          addContent({
-            id: Date.now(),
-            title: result.draft.title,
-            slug: result.draft.slug,
-            content: result.draft.body,
-            body: result.draft.body,
-            keyword: result.draft.keyword,
-            metaTitle: result.draft.metaTitle,
-            metaDescription: result.draft.metaDescription,
-            status: 'draft',
-            wordCount: result.draft.wordCount,
-            aiScore: result.draft.aiScore,
-            seoScore: result.draft.seoScore,
-            created: Date.now(),
-            updated: Date.now(),
-          });
-          deductCredit('aiCalls');
-        }
-
-        setActivationResult(result);
-
-        // Phase 4: agents activated
-        setActivationPhase(5);
-      } catch (err) {
-        setActivationError(
-          err instanceof Error ? err.message : 'Activation failed',
-        );
-        // Still mark phase 4 done -- agents activate regardless
-        setActivationPhase(5);
-        setActivationResult({
-          keywords: [],
-          plans: [],
-          draft: null,
-          creditsUsed: 0,
-          errors: [err instanceof Error ? err.message : 'Activation failed'],
-        });
-      }
-
-      setActivationDone(true);
-    }
-
-    run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Build display labels
-  function getPhaseLabel(idx: number): string {
-    if (idx === 0) return phases[0].doneLabel;
-    if (idx === 1) {
-      if (activationPhase > 1 && activationResult) {
-        return `Found ${activationResult.keywords.length} keyword opportunities`;
-      }
-      return phases[1].label;
-    }
-    if (idx === 2) {
-      if (activationPhase > 2 && activationResult) {
-        return `${activationResult.plans.length} articles planned for this week`;
-      }
-      return phases[2].label;
-    }
-    if (idx === 3) {
-      if (activationPhase > 3 && activationResult?.draft) {
-        return `Draft ready: ${activationResult.draft.title.slice(0, 40)}${activationResult.draft.title.length > 40 ? '...' : ''}`;
-      }
-      return phases[3].label;
-    }
-    if (idx === 4) {
-      if (activationPhase > 4) return phases[4].doneLabel;
-      return phases[4].label;
-    }
-    return '';
-  }
-
-  function getPhaseIcon(idx: number) {
-    if (idx < activationPhase) {
-      // completed
-      return (
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-500/10 text-green-400">
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-        </div>
-      );
-    }
-    if (idx === activationPhase) {
-      // in progress
-      return (
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
-          <div className="h-3 w-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-        </div>
-      );
-    }
-    // pending
-    return (
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-border,hsl(240_3.7%_15.9%))]">
-        <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
-      </div>
-    );
-  }
-
-  const progressPercent = Math.min(100, (activationPhase / 5) * 100);
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-xl font-bold text-foreground">Activating Your Platform</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Setting up your content operation. This takes about 30 seconds.
-        </p>
-      </div>
-
-      {/* Checklist */}
-      <div className="flex flex-col gap-3">
-        {phases.map((_, idx) => (
-          <div key={idx} className="flex items-center gap-3">
-            {getPhaseIcon(idx)}
-            <span className={`text-sm ${idx < activationPhase ? 'text-foreground' : idx === activationPhase ? 'text-blue-400 animate-pulse-slow' : 'text-muted-foreground/50'}`}>
-              {getPhaseLabel(idx)}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Error notice (non-blocking) */}
-      {activationError && activationDone && (
-        <p className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs text-yellow-400">
-          Agents activated. Content will generate when AI is connected.
-        </p>
-      )}
-
-      {/* Progress bar */}
-      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-border,hsl(240_3.7%_15.9%))]">
-        <div
-          className="h-full rounded-full bg-blue-500 transition-all duration-700"
-          style={{ width: `${progressPercent}%` }}
-        />
-      </div>
-
-      {/* Cost note */}
-      <p className="text-center text-xs text-muted-foreground">
-        Uses 3 of your 100 free credits
-      </p>
-
-      {/* Continue button (only when done) */}
-      {activationDone && (
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="rounded-lg border border-[var(--color-border,hsl(240_3.7%_15.9%))] px-4 py-2.5 text-sm text-muted-foreground transition hover:text-foreground"
-          >
-            Back
-          </button>
-          <button
-            type="button"
-            onClick={onNext}
-            className="flex-1 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
-          >
-            Continue
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Step 6 -- Done
-// ---------------------------------------------------------------------------
-
-function StepDone({
-  activationResult,
-  onFinish,
-  onBack,
-}: {
-  activationResult: ActivationResult | null;
-  onFinish: () => void;
-  onBack: () => void;
-}) {
-  const keywordCount = activationResult?.keywords.length ?? 0;
-  const planCount = activationResult?.plans.length ?? 0;
-  const hasDraft = !!activationResult?.draft;
-
-  const quickLinks = [
-    { label: 'Dashboard', href: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-    { label: 'Review Draft', href: '/editor', icon: 'M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10' },
-    { label: 'Keywords', href: '/seo', icon: 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z' },
-    { label: 'Settings', href: '/settings', icon: 'M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.108-1.204l-.526-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z' },
-  ];
-
-  return (
-    <div className="flex flex-col items-center gap-6 text-center">
-      {/* Checkmark */}
-      <div className="animate-check-pop flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 text-green-400">
-        <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-        </svg>
-      </div>
-
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Your content operation is live.</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Here&apos;s what was set up:
-        </p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid w-full grid-cols-2 gap-3">
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border,hsl(240_3.7%_15.9%))] px-3 py-2.5 text-left">
-          <span className="text-lg font-bold text-blue-400">{keywordCount}</span>
-          <span className="text-xs text-muted-foreground">keywords discovered</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border,hsl(240_3.7%_15.9%))] px-3 py-2.5 text-left">
-          <span className="text-lg font-bold text-blue-400">{planCount}</span>
-          <span className="text-xs text-muted-foreground">articles planned</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border,hsl(240_3.7%_15.9%))] px-3 py-2.5 text-left">
-          <span className="text-lg font-bold text-blue-400">{hasDraft ? 1 : 0}</span>
-          <span className="text-xs text-muted-foreground">draft ready for review</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border,hsl(240_3.7%_15.9%))] px-3 py-2.5 text-left">
-          <span className="text-lg font-bold text-green-400">8</span>
-          <span className="text-xs text-muted-foreground">agents monitoring</span>
-        </div>
-      </div>
-
-      {/* Quick links */}
-      <div className="grid w-full grid-cols-2 gap-3">
-        {quickLinks.map((link) => (
-          <div
-            key={link.label}
-            className="flex items-center gap-2 rounded-lg border border-[var(--color-border,hsl(240_3.7%_15.9%))] px-3 py-2.5 text-sm text-muted-foreground"
-          >
-            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d={link.icon} />
-            </svg>
-            {link.label}
-          </div>
-        ))}
-      </div>
-
-      {/* Buttons */}
-      <div className="flex w-full gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-lg border border-[var(--color-border,hsl(240_3.7%_15.9%))] px-4 py-2.5 text-sm text-muted-foreground transition hover:text-foreground"
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          onClick={onFinish}
-          className="flex-1 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-500"
-        >
-          Go to Command Center
-        </button>
-      </div>
-    </div>
-  );
-}

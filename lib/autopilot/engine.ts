@@ -122,9 +122,10 @@ export function createDefaultEngineState(): AutopilotEngineState {
   };
 }
 
-export function createAutopilotConfig(niche: string, language: string): AutopilotEngineConfig {
+export function createAutopilotConfig(niche: string, language: string, domain: string = ''): AutopilotEngineConfig {
   return {
     niche,
+    domain,
     language,
     targetAudience: 'general audience',
     contentGoal: 'traffic',

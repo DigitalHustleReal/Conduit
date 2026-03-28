@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useState, useMemo, useCallback } from 'react';
 import { SeedUploader } from '@/components/SeedUploader';
 import type { SeedData } from '@/lib/autopilot/seed';
+import { ActivationSequence } from '@/components/ActivationSequence';
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
@@ -86,6 +87,7 @@ export default function AutopilotPage() {
   const [newCompetitor, setNewCompetitor] = useState('');
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>('All');
   const [saved, setSaved] = useState(false);
+  const [showActivation, setShowActivation] = useState(false);
 
   const isEnabled = autopilot?.enabled ?? false;
   const apStats = autopilot?.stats ?? { total_runs: 0, total_credits: 0, articles_created: 0, issues_fixed: 0, distributions: 0 };
@@ -410,6 +412,14 @@ export default function AutopilotPage() {
                 >
                   {isEnabled ? 'Pause Autopilot' : 'Resume Autopilot'}
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowActivation(true)}
+                  disabled={!niche}
+                  className="border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+                >
+                  Re-run Activation
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -556,6 +566,19 @@ export default function AutopilotPage() {
           </Card>
         </div>
       </div>
+
+      {/* Re-run Activation overlay */}
+      {showActivation && (
+        <ActivationSequence
+          niche={niche || settings?.niche || 'Technology'}
+          domain={(settings as unknown as Record<string, string>)?.siteDomain ?? ''}
+          competitors={competitors}
+          language={language}
+          targetAudience={targetAudience}
+          contentGoal={contentGoal}
+          onComplete={() => setShowActivation(false)}
+        />
+      )}
     </div>
   );
 }

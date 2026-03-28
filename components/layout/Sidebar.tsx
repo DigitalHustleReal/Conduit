@@ -12,6 +12,7 @@ interface NavItem {
   label: string;
   href: string;
   pro?: boolean;
+  isNew?: boolean;
 }
 
 interface NavGroup {
@@ -23,6 +24,8 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   { title: 'Overview', items: [
     { id: 'dashboard', icon: '\u26A1', label: 'Dashboard', href: '/dashboard' },
+    { id: 'review', icon: '\u2714', label: 'Review Queue', href: '/review' },
+    { id: 'autopilot', icon: '\uD83E\uDD16', label: 'Autopilot', href: '/autopilot', isNew: true },
   ]},
   { title: 'Intelligence', items: [
     { id: 'chat', icon: '\uD83D\uDCAC', label: 'AI Chat', href: '/chat' },
@@ -32,6 +35,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: 'prompt-library', icon: '\u26A1', label: 'Prompt Library', href: '/prompt-library', pro: true },
     { id: 'seo', icon: '\uD83D\uDD0D', label: 'SEO Center', href: '/seo' },
     { id: 'analytics', icon: '\uD83D\uDCC8', label: 'Analytics', href: '/analytics' },
+    { id: 'performance', icon: '\uD83C\uDFAF', label: 'Performance', href: '/performance', isNew: true },
   ]},
   { title: 'Content', items: [
     { id: 'collections', icon: '\uD83D\uDDC2', label: 'Collections', href: '/collections' },
@@ -66,7 +70,8 @@ const NAV_GROUPS: NavGroup[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { siteName, credits, pricingPlan } = useWorkspace();
+  const { siteName, credits, pricingPlan, reviewQueue } = useWorkspace();
+  const pendingReviewCount = reviewQueue?.filter((q) => q.status === 'pending')?.length ?? 0;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ 'SEO Tools': true, 'Creator': true });
 
   const limits = PLAN_LIMITS[pricingPlan] || PLAN_LIMITS.free;
@@ -127,6 +132,16 @@ export function Sidebar() {
                   {item.pro && (
                     <span className="text-[8px] font-bold tracking-wider bg-blue-500/15 text-blue-400 border border-blue-500/25 px-1.5 py-0.5 rounded-full uppercase">
                       Pro
+                    </span>
+                  )}
+                  {item.isNew && (
+                    <span className="text-[8px] font-bold tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-1.5 py-0.5 rounded-full uppercase">
+                      New
+                    </span>
+                  )}
+                  {item.id === 'review' && pendingReviewCount > 0 && (
+                    <span className="text-[9px] font-bold min-w-[20px] text-center bg-rose-500 text-white px-1.5 py-0.5 rounded-full">
+                      {pendingReviewCount > 99 ? '99+' : pendingReviewCount}
                     </span>
                   )}
                 </Link>

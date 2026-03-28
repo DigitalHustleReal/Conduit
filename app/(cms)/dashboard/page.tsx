@@ -1,23 +1,14 @@
 'use client';
 
-import { useWorkspace, PLAN_LIMITS } from '@/stores/workspace';
+import { useWorkspace } from '@/stores/workspace';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import Link from 'next/link';
-import { useMemo } from 'react';
 
-const AGENT_NAMES: Record<string, string> = {
-  contentAutopilot: 'Content Autopilot',
-  seoGuardian: 'SEO Guardian',
-  keywordOpportunity: 'Keyword Opportunity',
-  publishingPipeline: 'Pipeline Manager',
-  smartOnboarding: 'Smart Onboarding',
-  healthMonitor: 'Health Monitor',
-  contentRefresh: 'Content Refresh',
-  interlinkBuilder: 'Interlink Builder',
-};
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
+
+/* ─── Helpers ────────────────────────────────────────────────── */
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -60,48 +51,152 @@ function scoreBg(score: number): string {
   return 'bg-rose-400';
 }
 
-function statusDot(status: string): string {
-  if (status === 'published') return 'bg-emerald-400';
-  if (status === 'review') return 'bg-blue-400';
-  return 'bg-amber-400';
+/* Volume / difficulty / intent helpers */
+function volumeLabel(v: number): { text: string; color: string } {
+  if (v >= 5000) return { text: 'High', color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' };
+  if (v >= 1000) return { text: 'Med', color: 'bg-amber-500/15 text-amber-400 border-amber-500/30' };
+  return { text: 'Low', color: 'bg-muted text-muted-foreground border-border' };
 }
 
+function intentLabel(kw: string): string {
+  const lower = kw.toLowerCase();
+  if (lower.includes('buy') || lower.includes('price') || lower.includes('cost') || lower.includes('cheap') || lower.includes('deal')) return 'Trans';
+  if (lower.includes('best') || lower.includes('top') || lower.includes('review') || lower.includes('vs')) return 'Commercial';
+  return 'Info';
+}
+
+function intentColor(intent: string): string {
+  if (intent === 'Trans') return 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+  if (intent === 'Commercial') return 'bg-violet-500/15 text-violet-400 border-violet-500/30';
+  return 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+}
+
+/* ─── Phase descriptions ─────────────────────────────────────── */
+function phaseText(phase: string | undefined): string {
+  switch (phase) {
+    case 'discovery': return 'Discovering keywords...';
+    case 'planning': return 'Planning content calendar...';
+    case 'generation': return 'Generating draft...';
+    case 'optimization': return 'Optimizing SEO...';
+    case 'distribution': return 'Distributing content...';
+    case 'monitoring': return 'Monitoring performance...';
+    default: return 'Idle';
+  }
+}
+
+/* Activity feed icon by action type */
+function activityIcon(action: string): string {
+  const lower = action.toLowerCase();
+  if (lower.includes('keyword') || lower.includes('discover')) return '\uD83D\uDD0D';
+  if (lower.includes('plan') || lower.includes('queue') || lower.includes('schedule')) return '\uD83D\uDCDD';
+  if (lower.includes('draft') || lower.includes('generat') || lower.includes('writ')) return '\u270D\uFE0F';
+  if (lower.includes('seo') || lower.includes('meta') || lower.includes('fix')) return '\uD83D\uDD27';
+  if (lower.includes('alert') || lower.includes('drop') || lower.includes('position')) return '\uD83D\uDCCA';
+  if (lower.includes('publish') || lower.includes('distribut')) return '\uD83D\uDE80';
+  if (lower.includes('interlink') || lower.includes('link')) return '\uD83D\uDD17';
+  if (lower.includes('refresh') || lower.includes('updat')) return '\u267B\uFE0F';
+  return '\u2726';
+}
+
+/* ─── Main Dashboard ─────────────────────────────────────────── */
+
 export default function DashboardPage() {
-  const { content, keywords, pipeline, credits, pricingPlan, agents, autopilot, siteName, settings } = useWorkspace();
+  const {
+    content, keywords, pipeline,
+    agents, autopilot, siteName, settings,
+    reviewQueue,
+  } = useWorkspace();
+
+  const pendingReviewCount = reviewQueue?.filter((q) => q.status === 'pending')?.length ?? 0;
+
+  const [autopilotToggle, setAutopilotToggle] = useState(autopilot?.enabled ?? false);
 
   const published = useMemo(() => content.filter((c) => c.status === 'published'), [content]);
   const drafts = useMemo(() => content.filter((c) => c.status === 'draft'), [content]);
-  const review = useMemo(() => content.filter((c) => c.status === 'review'), [content]);
   const avgSEO = published.length ? Math.round(published.reduce((a, c) => a + (c.seoScore || 0), 0) / published.length) : 0;
-  const avgAI = published.length ? Math.round(published.reduce((a, c) => a + (c.aiScore || 0), 0) / published.length) : 0;
-  const limits = PLAN_LIMITS[pricingPlan] || PLAN_LIMITS.free;
-  const creditPct = Math.min((credits.aiCalls / limits.aiCalls) * 100, 100);
   const activeAgents = Object.values(agents.registry).filter((a) => a.enabled).length;
-  const totalContent = content.length;
-  const pubPct = totalContent ? (published.length / totalContent) * 100 : 0;
-  const draftPct = totalContent ? (drafts.length / totalContent) * 100 : 0;
-  const reviewPct = totalContent ? (review.length / totalContent) * 100 : 0;
 
-  const recentContent = useMemo(
-    () => [...content].sort((a, b) => (b.updated || 0) - (a.updated || 0)).slice(0, 8),
-    [content],
+  /* Autopilot state with safe access */
+  const apBudget = autopilot?.creditBudget ?? { daily: 10, used_today: 0 };
+  const apPhase = (autopilot as unknown as Record<string, unknown>)?.phase as string | undefined;
+
+  /* Agent history for activity feed */
+  const agentHistory = agents?.history ?? [];
+  const recentActivity = useMemo(() => agentHistory.slice(0, 15), [agentHistory]);
+  const lastThreeActions = useMemo(() => agentHistory.slice(0, 3), [agentHistory]);
+
+  /* Discovered keywords — use keywords marked as opportunity or recently added */
+  const discoveredKeywords = useMemo(
+    () => keywords.filter((k) => k.status === 'opportunity').slice(0, 5),
+    [keywords],
   );
 
-  const quickActions = [
-    { href: '/editor/new', label: 'New Article', desc: 'Create content with AI assistance', iconPath: 'M12 4v16m8-8H4', color: 'blue' },
-    { href: '/ai-studio', label: 'AI Studio', desc: '21 specialized AI tools', iconPath: 'M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611l-.772.13c-1.687.282-3.415.376-5.113.276a24.137 24.137 0 0 1-3.25-.39', color: 'cyan' },
-    { href: '/agents', label: 'AI Agents', desc: `${activeAgents} of 8 agents active`, iconPath: 'M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h9a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 15.75 4.5h-9A2.25 2.25 0 0 0 4.5 6.75v10.5A2.25 2.25 0 0 0 6.75 19.5Z', color: 'emerald' },
-    { href: '/seo', label: 'SEO Center', desc: `Average score: ${avgSEO}`, iconPath: 'M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5m.75-9 3-3 2.148 2.148A12.061 12.061 0 0 1 16.5 7.605', color: 'violet' },
-  ];
+  /* Content queue — pipeline items or drafts/scheduled */
+  const contentQueue = useMemo(() => {
+    const pipelineItems = pipeline
+      .filter((p) => p.stage !== 'published')
+      .sort((a, b) => b.updated - a.updated)
+      .slice(0, 3)
+      .map((p) => ({
+        id: p.id,
+        title: p.title,
+        status: p.stage === 'backlog' ? 'Planned' : p.stage === 'writing' ? 'Drafting...' : p.stage === 'review' ? 'Ready for Review' : 'Published',
+        date: p.updated,
+        contentId: p.contentId,
+      }));
+    if (pipelineItems.length > 0) return pipelineItems;
+    // Fallback: recent drafts/review content
+    return content
+      .filter((c) => c.status === 'draft' || c.status === 'review' || c.status === 'scheduled')
+      .sort((a, b) => b.updated - a.updated)
+      .slice(0, 3)
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        status: c.status === 'draft' ? 'Drafting...' : c.status === 'review' ? 'Ready for Review' : c.status === 'scheduled' ? 'Planned' : c.status,
+        date: c.scheduledAt || c.updated,
+        contentId: c.id,
+      }));
+  }, [pipeline, content]);
 
-  const colorMap: Record<string, { border: string; bg: string; text: string; iconBg: string }> = {
-    blue: { border: 'border-l-blue-500', bg: 'bg-blue-500/10', text: 'text-blue-400', iconBg: 'bg-blue-500/15' },
-    cyan: { border: 'border-l-cyan-500', bg: 'bg-cyan-500/10', text: 'text-cyan-400', iconBg: 'bg-cyan-500/15' },
-    emerald: { border: 'border-l-emerald-500', bg: 'bg-emerald-500/10', text: 'text-emerald-400', iconBg: 'bg-emerald-500/15' },
-    violet: { border: 'border-l-violet-500', bg: 'bg-violet-500/10', text: 'text-violet-400', iconBg: 'bg-violet-500/15' },
-    amber: { border: 'border-l-amber-500', bg: 'bg-amber-500/10', text: 'text-amber-400', iconBg: 'bg-amber-500/15' },
-    rose: { border: 'border-l-rose-500', bg: 'bg-rose-500/10', text: 'text-rose-400', iconBg: 'bg-rose-500/15' },
-  };
+  /* Performance alerts — content with issues */
+  const performanceAlerts = useMemo(() => {
+    const alerts: Array<{ message: string; severity: 'red' | 'amber'; contentId?: number }> = [];
+    const now = Date.now();
+    const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+    let staleCount = 0;
+
+    for (const c of published) {
+      // Stale content
+      if (c.updated && now - c.updated > ninetyDays) {
+        staleCount++;
+      }
+      // Low SEO
+      if (c.seoScore && c.seoScore < 40) {
+        alerts.push({ message: `"${c.title}" has low SEO score (${c.seoScore})`, severity: 'red', contentId: c.id });
+      }
+    }
+
+    if (staleCount > 0) {
+      alerts.push({ message: `${staleCount} article${staleCount > 1 ? 's' : ''} haven't been updated in 90 days`, severity: 'amber' });
+    }
+
+    // Check for keywords that lost position
+    for (const k of keywords) {
+      if (k.status === 'lost') {
+        alerts.push({ message: `Keyword "${k.keyword || k.term}" lost ranking`, severity: 'red' });
+      }
+    }
+
+    return alerts.slice(0, 5);
+  }, [published, keywords]);
+
+  const hasNiche = !!(settings?.niche);
+  const isNewUser = content.length === 0 && keywords.length === 0 && !hasNiche;
+
+  /* Next run estimate */
+  const conductorInterval = autopilot?.schedule?.conductor_interval ?? 21600000;
+  const nextRunHours = Math.round(conductorInterval / 3600000);
 
   return (
     <div className="space-y-6">
@@ -111,214 +206,188 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight">
             {getGreeting()}, <span className="text-blue-400">{siteName || 'Conduit'}</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-            <span>{published.length} published</span>
-            <span className="text-muted-foreground/50">&#183;</span>
-            <span>{activeAgents} agents active</span>
-            <span className="text-muted-foreground/50">&#183;</span>
-            <span className="flex items-center gap-1.5">
-              Autopilot
-              {autopilot.enabled ? (
-                <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-                  </span>
-                  ON
-                </span>
-              ) : (
-                <span className="text-muted-foreground font-medium">OFF</span>
-              )}
-            </span>
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">{formatDate()}</p>
         </div>
-        <div className="text-xs text-muted-foreground font-mono hidden sm:block">{formatDate()}</div>
       </div>
 
-      {/* ── Top Metrics Row ────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Content */}
-        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-blue-500 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Content</span>
-              <svg className="w-4 h-4 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+      {/* ── Review Queue Banner ──────────────────────────── */}
+      {pendingReviewCount > 0 && (
+        <div className="flex items-center justify-between p-4 rounded-xl bg-amber-500/10 border border-amber-500/25">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">{'\u2714'}</span>
+            <div>
+              <span className="text-sm font-semibold text-foreground">
+                {pendingReviewCount} item{pendingReviewCount !== 1 ? 's' : ''} need{pendingReviewCount === 1 ? 's' : ''} your review
+              </span>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Agent suggestions are waiting for your approval
+              </p>
             </div>
-            <div className="text-3xl font-bold text-foreground mb-3">{totalContent}</div>
-            {/* Mini stacked bar */}
-            <div className="flex h-1.5 rounded-full overflow-hidden bg-muted mb-2">
-              {pubPct > 0 && <div className="bg-emerald-400 transition-all" style={{ width: `${pubPct}%` }} />}
-              {draftPct > 0 && <div className="bg-amber-400 transition-all" style={{ width: `${draftPct}%` }} />}
-              {reviewPct > 0 && <div className="bg-blue-400 transition-all" style={{ width: `${reviewPct}%` }} />}
-            </div>
-            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />{published.length} pub</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />{drafts.length} draft</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" />{review.length} review</span>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+          <Link href="/review">
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-500 text-white">
+              Review Now &rarr;
+            </Button>
+          </Link>
+        </div>
+      )}
 
-        {/* Avg SEO Score */}
-        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-emerald-500 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-200">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Avg SEO Score</span>
-              <svg className="w-4 h-4 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
-            </div>
-            <div className="flex items-end gap-3">
-              <div className={`text-3xl font-bold ${scoreColor(avgSEO)}`}>{avgSEO}</div>
-              <span className="text-xs text-muted-foreground mb-1">/ 100</span>
-            </div>
-            <div className="mt-3">
-              <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
-                <div className={`${scoreBg(avgSEO)} transition-all`} style={{ width: `${avgSEO}%` }} />
-              </div>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-2">
-              {avgSEO >= 80 ? 'Excellent optimization' : avgSEO >= 60 ? 'Good, room to improve' : avgSEO >= 40 ? 'Needs attention' : 'Critical — run SEO Guardian'}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Active Agents */}
-        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-cyan-500 hover:shadow-lg hover:shadow-cyan-500/5 transition-all duration-200">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Agents</span>
-              <svg className="w-4 h-4 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h9a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 15.75 4.5h-9A2.25 2.25 0 0 0 4.5 6.75v10.5A2.25 2.25 0 0 0 6.75 19.5Z" /></svg>
-            </div>
-            <div className="flex items-end gap-2">
-              <span className={`text-3xl font-bold ${activeAgents > 0 ? 'text-cyan-400' : 'text-muted-foreground'}`}>{activeAgents}</span>
-              <span className="text-xs text-muted-foreground mb-1">of 8 running</span>
-            </div>
-            <div className="mt-3 flex gap-1">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 flex-1 rounded-full transition-all ${i < activeAgents ? 'bg-cyan-400' : 'bg-muted'}`}
+      {/* ── A. Autopilot Status Bar ────────────────────── */}
+      <Card className="bg-card/80 backdrop-blur border-border overflow-hidden">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            {/* Toggle */}
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-sm font-semibold text-foreground">Autopilot</span>
+              <button
+                onClick={() => setAutopilotToggle(!autopilotToggle)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  autopilotToggle ? 'bg-emerald-500' : 'bg-muted'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                    autopilotToggle ? 'translate-x-6' : 'translate-x-1'
+                  }`}
                 />
+              </button>
+              <Badge
+                variant={autopilotToggle ? 'default' : 'secondary'}
+                className={`text-[9px] ${autopilotToggle ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'text-muted-foreground'}`}
+              >
+                {autopilotToggle ? 'ON' : 'OFF'}
+              </Badge>
+            </div>
+
+            {/* Separator */}
+            <div className="hidden sm:block w-px h-6 bg-border" />
+
+            {/* Current phase */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-1">
+              {autopilotToggle && apPhase && apPhase !== 'idle' ? (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-400" />
+                  </span>
+                  <span>{phaseText(apPhase)}</span>
+                </>
+              ) : autopilotToggle ? (
+                <span>Idle &mdash; next run in {nextRunHours}h</span>
+              ) : (
+                <span>Paused &mdash; <Link href="/autopilot" className="text-blue-400 hover:underline">configure autopilot</Link></span>
+              )}
+            </div>
+
+            {/* Credits today */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+              <span className="font-mono">{apBudget.used_today}/{apBudget.daily} daily budget</span>
+            </div>
+          </div>
+
+          {/* Last 3 actions */}
+          {lastThreeActions.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-x-4 gap-y-1">
+              {lastThreeActions.map((entry, i) => (
+                <span key={i} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                  <span className="text-xs">{activityIcon(entry.action)}</span>
+                  <span className="truncate max-w-[250px]">{entry.action}</span>
+                  <span className="text-muted-foreground/40 font-mono">{relativeTime(entry.ts)}</span>
+                </span>
               ))}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">
-              {activeAgents === 0 ? 'No agents running' : `${activeAgents} agent${activeAgents > 1 ? 's' : ''} monitoring your content`}
-            </p>
-          </CardContent>
-        </Card>
+          )}
 
-        {/* AI Credits */}
-        <Card className={`bg-card/80 backdrop-blur border-border border-l-[3px] ${creditPct >= 80 ? 'border-l-rose-500' : 'border-l-violet-500'} hover:shadow-lg transition-all duration-200`}>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Credits</span>
-              <Badge variant="secondary" className="text-[9px] uppercase tracking-wider">{pricingPlan}</Badge>
+          {lastThreeActions.length === 0 && autopilotToggle && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <span className="text-[11px] text-muted-foreground">No actions yet. Agents will begin working based on your schedule.</span>
             </div>
-            <div className="flex items-end gap-2">
-              <span className={`text-3xl font-bold ${creditPct >= 80 ? 'text-rose-400' : 'text-violet-400'}`}>{credits.aiCalls}</span>
-              <span className="text-xs text-muted-foreground mb-1">/ {limits.aiCalls}</span>
-            </div>
-            <div className="mt-3">
-              <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
-                <div
-                  className={`transition-all ${creditPct >= 80 ? 'bg-rose-400' : creditPct >= 50 ? 'bg-amber-400' : 'bg-violet-400'}`}
-                  style={{ width: `${creditPct}%` }}
-                />
-              </div>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-2">
-              {creditPct >= 90 ? 'Almost depleted' : creditPct >= 80 ? 'Running low' : `${Math.round(100 - creditPct)}% remaining`}
-              {pricingPlan === 'free' && (
-                <Link href="/settings" className="text-blue-400 hover:underline ml-1.5">Upgrade</Link>
-              )}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* ── Main Content Area ──────────────────────────── */}
+      {/* ── Main Grid: Activity Feed + Right Panels ──── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left Column — Recent Content (2/3) */}
+
+        {/* ── B. Agent Activity Feed (left 2/3) ────────── */}
         <div className="lg:col-span-2">
           <Card className="bg-card/80 backdrop-blur border-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold">Recent Content</CardTitle>
-                <Link href="/editor/new">
+                <CardTitle className="text-sm font-semibold">Agent Activity</CardTitle>
+                <Link href="/autopilot">
                   <Button size="sm" variant="outline" className="text-xs h-7 border-border hover:border-blue-500/50">
-                    + New Article
+                    View Full Log
                   </Button>
                 </Link>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              {recentContent.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-[10px] text-muted-foreground uppercase tracking-wider border-b border-border">
-                        <th className="text-left py-2 pr-2 font-semibold">Status</th>
-                        <th className="text-left py-2 pr-2 font-semibold">Title</th>
-                        <th className="text-left py-2 pr-2 font-semibold w-24">SEO</th>
-                        <th className="text-left py-2 pr-2 font-semibold w-24">AI</th>
-                        <th className="text-right py-2 pr-2 font-semibold">Words</th>
-                        <th className="text-right py-2 font-semibold">Updated</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentContent.map((c) => {
-                        const seo = c.seoScore || 0;
-                        const ai = c.aiScore || 0;
-                        return (
-                          <tr key={c.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                            <td className="py-2.5 pr-2">
-                              <span className={`inline-block w-2 h-2 rounded-full ${statusDot(c.status)}`} />
-                            </td>
-                            <td className="py-2.5 pr-2 max-w-[260px]">
-                              <Link href={`/editor/${c.id}`} className="text-foreground hover:text-blue-400 transition-colors font-medium truncate block">
-                                {c.title || 'Untitled'}
-                              </Link>
-                              {c.collection && <span className="text-[10px] text-muted-foreground/50">{c.collection}</span>}
-                            </td>
-                            <td className="py-2.5 pr-2">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden max-w-[60px]">
-                                  <div className={`h-full ${scoreBg(seo)} transition-all`} style={{ width: `${seo}%` }} />
-                                </div>
-                                <span className={`text-xs font-mono ${scoreColor(seo)}`}>{seo}</span>
-                              </div>
-                            </td>
-                            <td className="py-2.5 pr-2">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden max-w-[60px]">
-                                  <div className={`h-full ${scoreBg(ai)} transition-all`} style={{ width: `${ai}%` }} />
-                                </div>
-                                <span className={`text-xs font-mono ${scoreColor(ai)}`}>{ai}</span>
-                              </div>
-                            </td>
-                            <td className="py-2.5 pr-2 text-right text-xs text-muted-foreground font-mono">
-                              {(c.wordCount || 0).toLocaleString()}
-                            </td>
-                            <td className="py-2.5 text-right text-[11px] text-muted-foreground font-mono">
-                              {c.updated ? relativeTime(c.updated) : '--'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              {recentActivity.length > 0 ? (
+                <div className="space-y-1">
+                  {recentActivity.map((entry, i) => (
+                    <div
+                      key={`${entry.ts}-${i}`}
+                      className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
+                    >
+                      <span className="text-base mt-0.5 shrink-0">{activityIcon(entry.action)}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground leading-snug">{entry.action}</p>
+                        {entry.creditsUsed > 0 && (
+                          <span className="text-[10px] text-muted-foreground/50 font-mono">{entry.creditsUsed} credits</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] text-muted-foreground/50 font-mono whitespace-nowrap">
+                          {relativeTime(entry.ts)}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-[10px] h-6 px-2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                        >
+                          View
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : isNewUser ? (
+                <div className="text-center py-12">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+                    <span className="text-2xl">{'\u2726'}</span>
+                  </div>
+                  <p className="text-base font-semibold text-foreground mb-1">Welcome to Conduit</p>
+                  <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
+                    Set your niche in Settings to activate the autopilot. Agents will discover keywords, plan content, and optimize SEO automatically.
+                  </p>
+                  <div className="flex items-center justify-center gap-3">
+                    <Link href="/settings">
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
+                        Set Your Niche
+                      </Button>
+                    </Link>
+                    <Link href="/autopilot">
+                      <Button size="sm" variant="outline" className="border-border hover:border-blue-500/50">
+                        Configure Autopilot
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               ) : (
-                <div className="text-center py-16">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
-                    <svg className="w-8 h-8 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                    </svg>
+                <div className="text-center py-12">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
+                    <span className="text-2xl text-muted-foreground/50">{'\uD83E\uDD16'}</span>
                   </div>
-                  <p className="text-lg font-semibold text-foreground mb-1">No content yet</p>
-                  <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">Create your first article and let AI agents optimize it automatically.</p>
-                  <Link href="/editor/new">
+                  <p className="text-base font-semibold text-foreground mb-1">No agent activity yet</p>
+                  <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
+                    {hasNiche
+                      ? 'Enable the autopilot to let agents work autonomously on your content.'
+                      : 'Set your niche in Settings to activate the autopilot.'}
+                  </p>
+                  <Link href={hasNiche ? '/autopilot' : '/settings'}>
                     <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
-                      Create First Article
+                      {hasNiche ? 'Enable Autopilot' : 'Set Your Niche'}
                     </Button>
                   </Link>
                 </div>
@@ -327,135 +396,214 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Right Column (1/3) */}
+        {/* ── Right Column (1/3) ───────────────────────── */}
         <div className="space-y-4">
-          {/* Quick Actions */}
-          <Card className="bg-card/80 backdrop-blur border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-1.5">
-              {quickActions.map((qa) => {
-                const c = colorMap[qa.color] || colorMap.blue;
-                return (
-                  <Link key={qa.href} href={qa.href}>
-                    <div className={`flex items-center gap-3 p-3 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-all duration-200 group cursor-pointer`}>
-                      <div className={`w-9 h-9 rounded-lg ${c.iconBg} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform`}>
-                        <svg className={`w-4 h-4 ${c.text}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d={qa.iconPath} />
-                        </svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-foreground group-hover:text-foreground transition-colors">{qa.label}</div>
-                        <div className="text-[11px] text-muted-foreground truncate">{qa.desc}</div>
-                      </div>
-                      <svg className="w-4 h-4 text-muted-foreground/50 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                      </svg>
-                    </div>
-                  </Link>
-                );
-              })}
-            </CardContent>
-          </Card>
 
-          {/* Agent Status */}
+          {/* ── C. Discovered Keywords Panel ──────────── */}
           <Card className="bg-card/80 backdrop-blur border-border">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold">Agent Status</CardTitle>
-                <Link href="/agents" className="text-[10px] text-muted-foreground hover:text-blue-400 transition-colors uppercase tracking-wider">View All</Link>
+                <CardTitle className="text-sm font-semibold">Discovered Keywords</CardTitle>
+                <Link href="/seo" className="text-[10px] text-muted-foreground hover:text-blue-400 transition-colors uppercase tracking-wider">
+                  View all
+                </Link>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-0.5">
-                {Object.entries(agents.registry).map(([id, agent]) => (
-                  <div key={id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-2.5">
-                      <span className="relative flex h-2 w-2">
-                        {agent.enabled && agent.running && (
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                        )}
-                        <span className={`relative inline-flex rounded-full h-2 w-2 ${agent.enabled ? (agent.running ? 'bg-emerald-400' : 'bg-emerald-400/60') : 'bg-muted-foreground/30'}`} />
-                      </span>
-                      <span className={`${agent.enabled ? 'text-foreground' : 'text-muted-foreground/50'}`}>{AGENT_NAMES[id] || id}</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground/50 font-mono">
-                      {agent.lastRun ? relativeTime(agent.lastRun) : 'Never'}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              {discoveredKeywords.length > 0 ? (
+                <div className="space-y-2">
+                  {discoveredKeywords.map((kw) => {
+                    const vol = volumeLabel(kw.volume);
+                    const intent = intentLabel(kw.keyword || kw.term || '');
+                    return (
+                      <div key={kw.id} className="p-2.5 rounded-lg border border-border hover:border-blue-500/30 transition-colors">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <span className="text-sm font-medium text-foreground leading-tight">{kw.keyword || kw.term}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                          <Badge variant="outline" className={`text-[9px] ${vol.color}`}>
+                            {vol.text} ({kw.volume.toLocaleString()})
+                          </Badge>
+                          <Badge variant="outline" className={`text-[9px] ${intentColor(intent)}`}>
+                            {intent}
+                          </Badge>
+                        </div>
+                        {/* Difficulty bar */}
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${kw.difficulty <= 30 ? 'bg-emerald-400' : kw.difficulty <= 60 ? 'bg-amber-400' : 'bg-rose-400'}`}
+                              style={{ width: `${kw.difficulty}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-muted-foreground font-mono w-6 text-right">{kw.difficulty}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-xs text-muted-foreground">
+                    {hasNiche
+                      ? 'Autopilot will discover keywords based on your niche'
+                      : 'Set your niche to start keyword discovery'}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Autopilot Mini Card */}
-          <Card className={`bg-card/80 backdrop-blur border-border ${autopilot.enabled ? 'border-emerald-500/20' : ''}`}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-foreground">Autopilot</span>
-                  <Badge variant={autopilot.enabled ? 'default' : 'secondary'} className={`text-[9px] ${autopilot.enabled ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'text-muted-foreground'}`}>
-                    {autopilot.enabled ? 'ON' : 'OFF'}
-                  </Badge>
-                </div>
-                <Link href="/agents" className="text-[10px] text-muted-foreground hover:text-blue-400 transition-colors">Configure</Link>
+          {/* ── D. Content Queue ──────────────────────── */}
+          <Card className="bg-card/80 backdrop-blur border-border">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">Content Queue</CardTitle>
+                <Link href="/pipeline" className="text-[10px] text-muted-foreground hover:text-blue-400 transition-colors uppercase tracking-wider">
+                  Pipeline
+                </Link>
               </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Budget used today</span>
-                  <span className="font-mono text-muted-foreground">{autopilot.creditBudget.used_today} / {autopilot.creditBudget.daily}</span>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {contentQueue.length > 0 ? (
+                <div className="space-y-1.5">
+                  {contentQueue.map((item) => {
+                    const statusColors: Record<string, string> = {
+                      'Planned': 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+                      'Drafting...': 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+                      'Ready for Review': 'bg-violet-500/15 text-violet-400 border-violet-500/30',
+                      'Published': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+                    };
+                    return (
+                      <div key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{item.title || 'Untitled'}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className={`text-[9px] ${statusColors[item.status] || 'text-muted-foreground'}`}>
+                              {item.status}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground/50 font-mono">
+                              {relativeTime(item.date)}
+                            </span>
+                          </div>
+                        </div>
+                        {(item.status === 'Drafting...' || item.status === 'Ready for Review') && item.contentId && (
+                          <Link href={`/editor/${item.contentId}`}>
+                            <Button size="sm" variant="ghost" className="text-[10px] h-6 px-2 text-blue-400 hover:text-blue-300">
+                              Review
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex h-1 rounded-full overflow-hidden bg-muted">
-                  <div
-                    className={`transition-all ${autopilot.creditBudget.used_today / autopilot.creditBudget.daily > 0.8 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                    style={{ width: `${Math.min((autopilot.creditBudget.used_today / autopilot.creditBudget.daily) * 100, 100)}%` }}
-                  />
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-xs text-muted-foreground">
+                    No content in queue &mdash; autopilot will plan content based on discovered keywords
+                  </p>
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground/50">
-                  <span>{autopilot.stats.total_runs} runs</span>
-                  <span>{autopilot.stats.articles_created} articles</span>
-                  <span>{autopilot.stats.issues_fixed} fixes</span>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── E. Performance Alerts ─────────────────── */}
+          <Card className="bg-card/80 backdrop-blur border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Performance Alerts</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {performanceAlerts.length > 0 ? (
+                <div className="space-y-1.5">
+                  {performanceAlerts.map((alert, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border ${
+                        alert.severity === 'red'
+                          ? 'border-rose-500/20 bg-rose-500/5'
+                          : 'border-amber-500/20 bg-amber-500/5'
+                      }`}
+                    >
+                      <span className={`text-xs mt-0.5 ${alert.severity === 'red' ? 'text-rose-400' : 'text-amber-400'}`}>
+                        {alert.severity === 'red' ? '\u26A0' : '\u26A0'}
+                      </span>
+                      <p className={`text-xs flex-1 ${alert.severity === 'red' ? 'text-rose-300' : 'text-amber-300'}`}>
+                        {alert.message}
+                      </p>
+                      {alert.contentId && (
+                        <Link href={`/editor/${alert.contentId}`}>
+                          <Button size="sm" variant="ghost" className="text-[10px] h-5 px-1.5 text-muted-foreground hover:text-foreground">
+                            Fix
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center gap-2 py-4 justify-center">
+                  <span className="text-emerald-400 text-sm">{'\u2713'}</span>
+                  <span className="text-xs text-emerald-400">All content performing well</span>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* ── Bottom: Full-Width Credit Bar ──────────────── */}
-      <Card className="bg-card/80 backdrop-blur border-border">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Credit Usage</span>
-              <Badge variant="secondary" className="text-[9px] uppercase tracking-wider">{pricingPlan} plan</Badge>
+      {/* ── F. Quick Stats Row (bottom, full width) ──── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {/* Total Content */}
+        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-blue-500">
+          <CardContent className="p-4">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Content</span>
+            <div className="text-2xl font-bold text-foreground mt-1">{content.length}</div>
+            <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
+              <span>{published.length} published</span>
+              <span className="text-muted-foreground/30">&middot;</span>
+              <span>{drafts.length} drafts</span>
             </div>
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="font-mono">{credits.aiCalls} / {limits.aiCalls} AI calls</span>
-              <span className="text-border">|</span>
-              <span className="font-mono">{credits.storage} / {limits.storage} MB storage</span>
-              <span className="text-border">|</span>
-              <span className="font-mono">{credits.apiReqs} / {limits.apiReqs} API reqs</span>
+          </CardContent>
+        </Card>
+
+        {/* Avg SEO Score */}
+        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-emerald-500">
+          <CardContent className="p-4">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg SEO Score</span>
+            <div className={`text-2xl font-bold mt-1 ${scoreColor(avgSEO)}`}>{avgSEO}<span className="text-sm text-muted-foreground font-normal">/100</span></div>
+            <div className="mt-1">
+              <div className="flex h-1 rounded-full overflow-hidden bg-muted">
+                <div className={`${scoreBg(avgSEO)} transition-all`} style={{ width: `${avgSEO}%` }} />
+              </div>
             </div>
-          </div>
-          <div className="flex h-2 rounded-full overflow-hidden bg-muted">
-            <div
-              className={`transition-all rounded-full ${creditPct >= 80 ? 'bg-rose-400' : creditPct >= 50 ? 'bg-amber-400' : 'bg-blue-400'}`}
-              style={{ width: `${creditPct}%` }}
-            />
-          </div>
-          {pricingPlan === 'free' && (
-            <div className="mt-2 text-[11px] text-muted-foreground">
-              On the Free plan.{' '}
-              <Link href="/settings" className="text-blue-400 hover:underline">
-                Upgrade to Pro
-              </Link>{' '}
-              for 10x more credits and priority support.
+          </CardContent>
+        </Card>
+
+        {/* Keywords Tracked */}
+        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-violet-500">
+          <CardContent className="p-4">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Keywords Tracked</span>
+            <div className="text-2xl font-bold text-violet-400 mt-1">{keywords.length}</div>
+            <div className="text-[10px] text-muted-foreground mt-1">
+              {discoveredKeywords.length} opportunities found
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* Agent Actions Today */}
+        <Card className="bg-card/80 backdrop-blur border-border border-l-[3px] border-l-cyan-500">
+          <CardContent className="p-4">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Agent Actions Today</span>
+            <div className="text-2xl font-bold text-cyan-400 mt-1">
+              {agentHistory.filter((h) => Date.now() - h.ts < 86400000).length}
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-1">
+              {activeAgents} of 8 agents active
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

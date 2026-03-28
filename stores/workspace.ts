@@ -5,6 +5,14 @@ import { persist } from 'zustand/middleware';
 import type { ContentItem, Collection, Keyword, PipelineItem, MediaItem } from '@/types/content';
 import type { Credits, TeamMember, WorkspaceSettings, QualityGate, Automation, AutopilotConfig } from '@/types/workspace';
 import type { AgentState, AgentFeedbackEntry } from '@/types/agent';
+import type {
+  AutopilotEngineConfig,
+  AutopilotEngineState,
+  KeywordSuggestion,
+  ContentPlan,
+  DraftContent,
+} from '@/lib/autopilot/engine';
+import { createDefaultEngineState } from '@/lib/autopilot/engine';
 import {
   loadWorkspaceData,
   syncContent,
@@ -15,6 +23,16 @@ import {
   deleteItem,
   logAudit,
 } from '@/lib/supabase/sync';
+import type { QueueItem, QueueItemType } from '@/lib/autopilot/queue';
+import {
+  createQueueItem,
+  markApproved,
+  markRejected,
+  markRevised,
+  bulkApproveItems,
+  bulkRejectItems,
+  dispatchApproval,
+} from '@/lib/autopilot/queue';
 
 interface WorkspaceStore {
   // Core
@@ -44,8 +62,15 @@ interface WorkspaceStore {
   agentMemory: Record<string, Record<string, { value: unknown; ts: number }>>;
   autopilot: AutopilotConfig;
 
+  // Autopilot engine
+  autopilotEngineConfig: AutopilotEngineConfig | null;
+  autopilotEngineState: AutopilotEngineState;
+
   // Content history
   contentHistory: Record<number, Array<{ ts: number; wordCount: number; title: string; snapshot: string }>>;
+
+  // Review Queue
+  reviewQueue: QueueItem[];
 
   // Analytics
   analyticsEvents: Array<{ id: number; type: string; contentId?: string; ts: number; meta?: Record<string, unknown> }>;
@@ -53,8 +78,20 @@ interface WorkspaceStore {
   // Onboarding
   onboardingComplete: boolean;
 
+  // Business profile (set during onboarding)
+  domain: string;
+  niche: string;
+  targetAudience: string;
+  contentGoal: string;
+  competitors: string[];
+
   // Actions
   setOnboardingComplete: (value: boolean) => void;
+  setDomain: (value: string) => void;
+  setNiche: (value: string) => void;
+  setTargetAudience: (value: string) => void;
+  setContentGoal: (value: string) => void;
+  setCompetitors: (value: string[]) => void;
   setAuth: (userId: string | null, isAuthenticated: boolean) => void;
   setWorkspace: (id: string, name: string) => void;
   setPlan: (plan: 'free' | 'pro' | 'business') => void;
@@ -78,8 +115,22 @@ interface WorkspaceStore {
   setCredits: (credits: Partial<Credits>) => void;
   deductCredit: (type?: keyof Credits) => boolean;
   setAutopilot: (config: Partial<AutopilotConfig>) => void;
+  setAutopilotEngineConfig: (config: AutopilotEngineConfig | null) => void;
+  updateAutopilotEngineState: (state: Partial<AutopilotEngineState>) => void;
+  addDiscoveredKeywords: (keywords: KeywordSuggestion[]) => void;
+  addPlannedContent: (plans: ContentPlan[]) => void;
+  addGeneratedDraft: (draft: DraftContent) => void;
   addAgentFeedback: (entry: AgentFeedbackEntry) => void;
   logAgentRun: (agentId: string, action: string, result: unknown, credits: number) => void;
+
+  // Review queue actions
+  addToQueue: (item: Omit<QueueItem, 'id' | 'status' | 'createdAt'>) => QueueItem;
+  approveItem: (id: string) => void;
+  rejectItem: (id: string, reason?: string) => void;
+  reviseItem: (id: string, revisedData: Record<string, unknown>) => void;
+  bulkApproveQueue: (type?: QueueItemType) => number;
+  bulkRejectQueue: (type?: QueueItemType, reason?: string) => number;
+  clearQueue: (status?: QueueItem['status']) => void;
 
   // Supabase sync
   loadFromSupabase: (workspaceId: string) => Promise<void>;
@@ -157,15 +208,30 @@ export const useWorkspace = create<WorkspaceStore>()(
       agentFeedback: [],
       agentMemory: {},
       autopilot: DEFAULT_AUTOPILOT,
+      autopilotEngineConfig: null,
+      autopilotEngineState: createDefaultEngineState(),
+      reviewQueue: [],
       contentHistory: {},
       analyticsEvents: [],
       onboardingComplete: false,
+
+      // Business profile
+      domain: '',
+      niche: '',
+      targetAudience: '',
+      contentGoal: 'traffic',
+      competitors: [],
 
       // -----------------------------------------------------------------------
       // Actions
       // -----------------------------------------------------------------------
 
       setOnboardingComplete: (value) => set({ onboardingComplete: value }),
+      setDomain: (value) => set({ domain: value }),
+      setNiche: (value) => set({ niche: value }),
+      setTargetAudience: (value) => set({ targetAudience: value }),
+      setContentGoal: (value) => set({ contentGoal: value }),
+      setCompetitors: (value) => set({ competitors: value }),
 
       setAuth: (userId, isAuthenticated) => set({ userId, isAuthenticated }),
 
@@ -302,6 +368,44 @@ export const useWorkspace = create<WorkspaceStore>()(
 
       setAutopilot: (config) => set((s) => ({ autopilot: { ...s.autopilot, ...config } })),
 
+      setAutopilotEngineConfig: (config) => set({ autopilotEngineConfig: config }),
+
+      updateAutopilotEngineState: (updates) =>
+        set((s) => ({ autopilotEngineState: { ...s.autopilotEngineState, ...updates } })),
+
+      addDiscoveredKeywords: (keywords) =>
+        set((s) => ({
+          autopilotEngineState: {
+            ...s.autopilotEngineState,
+            discoveredKeywords: [
+              ...s.autopilotEngineState.discoveredKeywords,
+              ...keywords,
+            ].slice(0, 500), // cap to prevent unbounded growth
+          },
+        })),
+
+      addPlannedContent: (plans) =>
+        set((s) => ({
+          autopilotEngineState: {
+            ...s.autopilotEngineState,
+            plannedContent: [
+              ...s.autopilotEngineState.plannedContent,
+              ...plans,
+            ].slice(0, 200),
+          },
+        })),
+
+      addGeneratedDraft: (draft) =>
+        set((s) => ({
+          autopilotEngineState: {
+            ...s.autopilotEngineState,
+            generatedDrafts: [
+              ...s.autopilotEngineState.generatedDrafts,
+              draft,
+            ].slice(0, 100),
+          },
+        })),
+
       addAgentFeedback: (entry) => set((s) => ({
         agentFeedback: [entry, ...s.agentFeedback].slice(0, 200),
       })),
@@ -315,6 +419,88 @@ export const useWorkspace = create<WorkspaceStore>()(
           ].slice(0, 500),
         },
       })),
+
+      // -----------------------------------------------------------------------
+      // Review queue actions
+      // -----------------------------------------------------------------------
+
+      addToQueue: (item) => {
+        const queueItem = createQueueItem(item);
+        set((s) => ({
+          reviewQueue: [queueItem, ...s.reviewQueue].slice(0, 1000),
+        }));
+        return queueItem;
+      },
+
+      approveItem: (id) => {
+        const state = get();
+        const item = state.reviewQueue.find((q) => q.id === id);
+        if (!item || item.status !== 'pending') return;
+
+        // Mark approved in queue
+        set({ reviewQueue: markApproved(state.reviewQueue, id) });
+
+        // Dispatch the side-effect
+        const s = get();
+        dispatchApproval(item, {
+          addKeyword: s.addKeyword,
+          addContent: s.addContent as unknown as (c: Record<string, unknown>) => void,
+          updateContentItem: s.updateContentItem as unknown as (id: number, updates: Record<string, unknown>) => void,
+          addPlannedContent: s.addPlannedContent as unknown as (plans: Array<Record<string, unknown>>) => void,
+        });
+      },
+
+      rejectItem: (id, reason) => {
+        set((s) => ({
+          reviewQueue: markRejected(s.reviewQueue, id, reason),
+        }));
+      },
+
+      reviseItem: (id, revisedData) => {
+        set((s) => ({
+          reviewQueue: markRevised(s.reviewQueue, id, revisedData),
+        }));
+      },
+
+      bulkApproveQueue: (type) => {
+        const state = get();
+        const { queue, count } = bulkApproveItems(state.reviewQueue, type);
+        set({ reviewQueue: queue });
+
+        // Dispatch side-effects for each approved item
+        const s = get();
+        const approvedItems = queue.filter(
+          (q) => q.status === 'approved' && q.reviewedAt && q.reviewedAt > Date.now() - 1000,
+        );
+        for (const item of approvedItems) {
+          dispatchApproval(item, {
+            addKeyword: s.addKeyword,
+            addContent: s.addContent as unknown as (c: Record<string, unknown>) => void,
+            updateContentItem: s.updateContentItem as unknown as (id: number, updates: Record<string, unknown>) => void,
+            addPlannedContent: s.addPlannedContent as unknown as (plans: Array<Record<string, unknown>>) => void,
+          });
+        }
+        return count;
+      },
+
+      bulkRejectQueue: (type, reason) => {
+        const state = get();
+        const { queue, count } = bulkRejectItems(state.reviewQueue, type, reason);
+        set({ reviewQueue: queue });
+        return count;
+      },
+
+      clearQueue: (status) => {
+        if (status) {
+          set((s) => ({
+            reviewQueue: s.reviewQueue.filter((q) => q.status !== status),
+          }));
+        } else {
+          set((s) => ({
+            reviewQueue: s.reviewQueue.filter((q) => q.status === 'pending'),
+          }));
+        }
+      },
 
       // -----------------------------------------------------------------------
       // Supabase full load
@@ -356,8 +542,16 @@ export const useWorkspace = create<WorkspaceStore>()(
         agentFeedback: state.agentFeedback,
         agentMemory: state.agentMemory,
         autopilot: state.autopilot,
+        autopilotEngineConfig: state.autopilotEngineConfig,
+        autopilotEngineState: state.autopilotEngineState,
+        reviewQueue: state.reviewQueue,
         contentHistory: state.contentHistory,
         onboardingComplete: state.onboardingComplete,
+        domain: state.domain,
+        niche: state.niche,
+        targetAudience: state.targetAudience,
+        contentGoal: state.contentGoal,
+        competitors: state.competitors,
       }),
     }
   )

@@ -7,6 +7,8 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { isGSCConnected, fetchGSCData, dateRangeFromLabel } from '@/lib/gsc';
 import type { GSCQuery } from '@/lib/gsc';
+import { SeedUploader } from '@/components/SeedUploader';
+import type { SeedData } from '@/lib/autopilot/seed';
 
 function scoreColor(score: number) {
   if (score >= 80) return 'text-green-600';
@@ -27,6 +29,24 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | '
 
 export default function SEOCenterPage() {
   const { content, keywords, settings } = useWorkspace();
+  const addKeyword = useWorkspace((s) => s.addKeyword);
+  const [showSeedUpload, setShowSeedUpload] = useState(false);
+
+  const handleSeedImport = useCallback((seeds: SeedData) => {
+    for (const kw of seeds.keywords) {
+      addKeyword({
+        id: Date.now() + Math.random(),
+        keyword: kw.keyword,
+        term: kw.keyword,
+        volume: kw.volume ?? 0,
+        difficulty: kw.difficulty ?? 50,
+        cpc: kw.cpc,
+        status: 'tracked',
+        trend: 'stable',
+      });
+    }
+    setShowSeedUpload(false);
+  }, [addKeyword]);
 
   const published = useMemo(() => content.filter((c) => c.status === 'published'), [content]);
   const avgSeo = useMemo(() => {
@@ -129,9 +149,16 @@ export default function SEOCenterPage() {
         </Card>
       </div>
 
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-wrap gap-3 mb-6">
         <Button variant="outline">Run SEO Audit</Button>
         <Button variant="outline">Fix All Issues</Button>
+        <Button
+          variant={showSeedUpload ? 'default' : 'outline'}
+          onClick={() => setShowSeedUpload(!showSeedUpload)}
+          className={showSeedUpload ? 'bg-blue-600 hover:bg-blue-500 text-white' : ''}
+        >
+          {showSeedUpload ? 'Close Upload' : 'Upload Keywords'}
+        </Button>
         {gscConnected ? (
           <Button variant="outline" onClick={syncFromGSC} disabled={gscSyncing}>
             {gscSyncing ? 'Syncing...' : 'Sync from GSC'}
@@ -140,6 +167,16 @@ export default function SEOCenterPage() {
           <a href="/api/gsc/auth" className={buttonVariants({ variant: 'outline' })}>Connect Search Console</a>
         )}
       </div>
+
+      {/* Seed Data Upload Section */}
+      {showSeedUpload && (
+        <div className="mb-6">
+          <SeedUploader
+            onImport={handleSeedImport}
+            existingKeywords={keywords.map((k) => k.keyword || k.term || '')}
+          />
+        </div>
+      )}
 
       {/* Content Health */}
       <Card className="mb-6">

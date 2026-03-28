@@ -7,7 +7,7 @@ const corsHeaders: Record<string, string> = {
 };
 
 const PLAN_LIMITS: Record<string, number> = {
-  free: 10,
+  free: 100,
   pro: 1000,
   business: 10000,
 };
@@ -18,45 +18,51 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    // 1. Verify JWT
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return Response.json({ error: 'Platform AI not configured. Set ANTHROPIC_API_KEY.' }, { status: 503, headers: corsHeaders });
+    }
+
+    // 1. Try to verify JWT (optional — guest mode allowed for free tier)
     const authHeader = request.headers.get('authorization') || '';
     const token = authHeader.replace('Bearer ', '');
-    if (!token) {
-      return Response.json({ error: 'Missing authorization token' }, { status: 401, headers: corsHeaders });
-    }
 
-    const supabase = createClient(
-      process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    let workspace: { id: string; plan: string; credits_ai_calls: number; settings?: Record<string, unknown> } | null = null;
+    let userId: string | null = null;
+    let effectiveApiKey = apiKey;
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return Response.json({ error: 'Invalid or expired token' }, { status: 401, headers: corsHeaders });
-    }
+    if (token && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
 
-    // 2. Load workspace
-    const { data: workspace, error: wsError } = await supabase
-      .from('workspaces')
-      .select('id, plan, credits_ai_calls, settings')
-      .eq('owner_id', user.id)
-      .single();
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) {
+        userId = user.id;
 
-    if (wsError || !workspace) {
-      return Response.json({ error: 'Workspace not found' }, { status: 404, headers: corsHeaders });
+        // 2. Load workspace
+        const { data: ws } = await supabase
+          .from('workspaces')
+          .select('id, plan, credits_ai_calls, settings')
+          .eq('owner_id', user.id)
+          .single();
+
+        workspace = ws;
+      }
     }
 
     // 3. Determine API key and check quota
-    const userApiKey = workspace.settings?.apiKey;
-    let apiKey = process.env.ANTHROPIC_API_KEY!;
+    const userApiKey = workspace?.settings?.apiKey as string | undefined;
 
     if (userApiKey) {
-      // User has their own key -- use it, skip quota
-      apiKey = userApiKey;
+      // User has their own key — use it, skip quota
+      effectiveApiKey = userApiKey;
     } else {
-      // Check platform quota
-      const limit = PLAN_LIMITS[workspace.plan] || PLAN_LIMITS.free;
-      const used = workspace.credits_ai_calls || 0;
+      // Check platform quota (guest users get free tier limit)
+      const plan = workspace?.plan || 'free';
+      const limit = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+      const used = workspace?.credits_ai_calls || 0;
 
       if (used >= limit) {
         return Response.json(
@@ -76,7 +82,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': effectiveApiKey,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(body),
@@ -84,8 +90,9 @@ export async function POST(request: Request) {
 
     const data = await anthropicRes.json();
 
-    // 5. Increment usage (async, non-blocking) -- only if using platform key
-    if (!userApiKey) {
+    // 5. Increment usage (async, non-blocking) — only if using platform key and workspace exists
+    if (!userApiKey && workspace && userId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
       const newCount = (workspace.credits_ai_calls || 0) + 1;
       supabase
         .from('workspaces')
@@ -95,12 +102,12 @@ export async function POST(request: Request) {
 
       // Send usage warning email at 8 of 10 free calls
       const limit = PLAN_LIMITS[workspace.plan] || PLAN_LIMITS.free;
-      if (newCount === limit - 2 && user.email) {
+      if (newCount === limit - 2) {
         const baseUrl = process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : '';
         fetch(baseUrl + '/api/email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: user.email, template: 'usageWarning', data: [newCount, limit] }),
+          body: JSON.stringify({ to: '', template: 'usageWarning', data: [newCount, limit] }),
         }).catch(() => {});
       }
     }

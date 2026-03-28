@@ -27,8 +27,15 @@ export async function callAI(
   const prov = AI_PROVIDERS[provider];
   const key = apiKey || prov?.getApiKey(settings);
 
-  if (!key && !options.session) {
-    throw new Error(`No API key for ${prov?.name || provider}. Go to Settings > API Keys to add your key, or sign in to use platform credits.`);
+  // Strategy:
+  // 1. If user has BYOK key → call provider directly (free for them)
+  // 2. If user has session → call /api/ai-proxy (uses platform key, tracks credits)
+  // 3. If neither but we're on the platform → try proxy anyway (it has ANTHROPIC_API_KEY server-side)
+  // 4. Only fail if truly nothing works
+  const useProxy = !key && provider === 'anthropic'; // no personal key → use platform proxy
+
+  if (!key && !useProxy) {
+    throw new Error(`No API key for ${prov?.name || provider}. Go to Settings > AI Engine to add your key.`);
   }
 
   // Build messages array — support multi-turn via options.messages or single prompt
@@ -48,13 +55,20 @@ export async function callAI(
     };
 
     let r: Response;
-    if (options.session && !key) {
+    if (useProxy) {
+      // Use platform AI proxy — has ANTHROPIC_API_KEY server-side
+      // Works even without user session (free tier uses platform credits)
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (options.session?.access_token) {
+        headers['Authorization'] = `Bearer ${options.session.access_token}`;
+      }
       r = await fetch('/api/ai-proxy', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${options.session.access_token}` },
+        headers,
         body: JSON.stringify(reqBody),
       });
     } else {
+      // BYOK — user's own API key, call Anthropic directly
       r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
